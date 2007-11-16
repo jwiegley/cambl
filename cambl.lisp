@@ -863,7 +863,6 @@
 (defun this-year ()
  (nth-value 5 (get-decoded-time)))
 
-(declaim (inline parse-datetime))
 (defun parse-datetime (string &key (format *input-time-format*)
 		       (default-year nil))
   (let ((decoded (parse-datetime-decoded string :format format)))
