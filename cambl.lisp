@@ -346,6 +346,7 @@
 	   sell-commodity
 
 	   amount-commodity
+	   balance-first-amount
 	   balance-commodities
 	   balance-commodity-count
 	   commodity-name
@@ -566,7 +567,13 @@
 
 (defgeneric value-zerop (value))
 (defgeneric value-zerop* (value))	; is it *really* zerop?
+(defgeneric value-minusp (value))
+(defgeneric value-minusp* (value))	; is it *really* minusp?
+(defgeneric value-plusp (value))
+(defgeneric value-plusp* (value))	; is it *really* plusp?
 
+(defgeneric compare (left right))
+(defgeneric compare* (left right))
 (defgeneric value-equal (left right))
 (defgeneric value-equalp (left right))
 (defgeneric value-not-equal (left right))
@@ -575,8 +582,6 @@
 (defgeneric value/= (left right))
 
 (defgeneric value-abs (value))
-(defgeneric value-round (value &optional precision))
-(defgeneric value-round* (value &optional precision))
 
 (defgeneric negate* (value))
 (defgeneric negate (value))
@@ -906,7 +911,7 @@
 		   ;;((char= c #\c))	; national representation of date/time
 
 		   ((char= c #\D)	; equiv: %m/%d/%y
-		    (princ (format-datetime datetime "%m/%d/%y") out))
+		    (princ (format-datetime datetime :format "%m/%d/%y") out))
 
 		   ((char= c #\d)
 		    (format out "~2,'0D" day))
@@ -917,7 +922,7 @@
 		   ;;((char= c #\O))
 
 		   ((char= c #\F)	; equiv: %Y-%m-%d
-		    (princ (format-datetime datetime "%Y-%m-%d") out))
+		    (princ (format-datetime datetime :format "%Y-%m-%d") out))
 					;
 		   ((char= c #\G))      ; year as a decimal number with century
 		   ((char= c #\g))	; same as %G, without century
@@ -951,10 +956,10 @@
 		   ((char= c #\p))	; national AM/PM, as appropriate
 
 		   ((char= c #\R)	; equiv: %H:%M
-		    (princ (format-datetime datetime "%H:%M") out))
+		    (princ (format-datetime datetime :format "%H:%M") out))
 
 		   ((char= c #\r)	; equiv: %I:%M:%S %p
-		    (princ (format-datetime datetime "%I:%M:%S %p") out))
+		    (princ (format-datetime datetime :format "%I:%M:%S %p") out))
 
 		   ((char= c #\S)
 		    (format out "~2,'0D" second))
@@ -963,7 +968,7 @@
 		    (format out "~D" (local-time:unix-time datetime)))
 
 		   ((char= c #\T)	; equiv: %H:%M:%S
-		    (princ (format-datetime datetime "%H:%M:%S") out))
+		    (princ (format-datetime datetime :format "%H:%M:%S") out))
 
 		   ((char= c #\t)	; tab
 		    (write-char #\Tab out))
@@ -973,7 +978,7 @@
 		   ((char= c #\V))	; week of the year 1-53 (*)
 
 		   ((char= c #\v)	; equiv: %e-%b-%Y
-		    (princ (format-datetime datetime "%e-%b-%Y") out))
+		    (princ (format-datetime datetime :format "%e-%b-%Y") out))
 
 		   ((char= c #\W))	; week number of the year (Mon) 00-53
 		   ((char= c #\w))	; weekday as a decimal (Sun) 0-6
@@ -1319,40 +1324,72 @@
 (defmethod value-zerop ((amount amount))
   (cl:zerop (amount-quantity (value-round amount))))
 (defmethod value-zerop ((balance balance))
-  (the boolean
-    (block nil
-      (mapc #'(lambda (entry)
-		(unless (value-zerop (cdr entry))
-		  (return nil)))
-	    (get-amounts-map balance))
-      t)))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-zerop (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
 
 (defmethod value-zerop* ((integer integer))
   (cl:zerop integer))
 (defmethod value-zerop* ((amount amount))
   (cl:zerop (amount-quantity amount)))
 (defmethod value-zerop* ((balance balance))
-  (the boolean
-    (block nil
-      (mapc #'(lambda (entry)
-		(unless (value-zerop* (cdr entry))
-		  (return nil)))
-	    (get-amounts-map balance))
-      t)))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-zerop* (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
 
-(declaim (inline value-minusp value-minusp*))
-
-(defun value-minusp (amount)
+(defmethod value-minusp ((integer integer))
+  (cl:minusp integer))
+(defmethod value-minusp ((amount amount))
   (cl:minusp (amount-quantity (value-round amount))))
-(defun value-minusp* (amount)
+(defmethod value-minusp ((balance balance))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-minusp (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
+
+(defmethod value-minusp* ((integer integer))
+  (cl:minusp integer))
+(defmethod value-minusp* ((amount amount))
   (cl:minusp (amount-quantity amount)))
+(defmethod value-minusp* ((balance balance))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-minusp* (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
 
-(declaim (inline value-plusp value-plusp*))
-
-(defun value-plusp (amount)
+(defmethod value-plusp ((integer integer))
+  (cl:plusp integer))
+(defmethod value-plusp ((amount amount))
   (cl:plusp (amount-quantity (value-round amount))))
-(defun value-plusp* (amount)
+(defmethod value-plusp ((balance balance))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-plusp (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
+
+(defmethod value-plusp* ((integer integer))
+  (cl:plusp integer))
+(defmethod value-plusp* ((amount amount))
   (cl:plusp (amount-quantity amount)))
+(defmethod value-plusp* ((balance balance))
+  (block outer
+    (mapc #'(lambda (entry)
+	      (unless (value-plusp* (cdr entry))
+		(return-from outer)))
+	  (get-amounts-map balance))
+    t))
 
 (defun value-basic-truth (result zerop-test-func)
   (cond
@@ -1379,10 +1416,16 @@
 
 ;;;_  + BALANCE commodity details
 
-(declaim (inline balance-commodities balance-commodity-count))
+(declaim (inline balance-commodities
+		 balance-first-amount
+		 balance-commodity-count))
 
 (defun balance-commodities (balance)
   (mapcar #'car (get-amounts-map balance)))
+
+(defun balance-first-amount (balance)
+  (assert (cl:plusp (balance-commodity-count balance)))
+  (cdar (get-amounts-map balance)))
 
 (defun balance-commodity-count (balance)
   (length (get-amounts-map balance)))
@@ -1403,13 +1446,21 @@
 		     (commodity-name left)
 		     (commodity-name right))))))
 
-(defun compare (left right)
+(defmethod compare ((left amount) (right amount))
   (verify-amounts left right "Comparing")
   (let ((left-rounded (value-round left))
 	(right-rounded (value-round right)))
     (compare* left-rounded right-rounded)))
+(defmethod compare ((left balance) (right amount))
+  (if (= (balance-commodity-count left) 1)
+      (compare (balance-first-amount left) right)
+      (error "Cannot compare balances with amounts")))
+(defmethod compare ((left amount) (right balance))
+  (if (= (balance-commodity-count right) 1)
+      (compare left (balance-first-amount right))
+      (error "Cannot compare balances with amounts")))
 
-(defun compare* (left right)
+(defmethod compare* ((left amount) (right amount))
   (verify-amounts left right "Exactly comparing")
   (the integer
     (cond ((= (amount-precision left)
@@ -1427,6 +1478,14 @@
 	     (amount--resize tmp (amount-precision left))
 	     (- (amount-quantity left)
 		(amount-quantity tmp)))))))
+(defmethod compare* ((left balance) (right amount))
+  (if (= (balance-commodity-count left) 1)
+      (compare* (balance-first-amount left) right)
+      (error "Cannot compare* balances with amounts")))
+(defmethod compare* ((left amount) (right balance))
+  (if (= (balance-commodity-count right) 1)
+      (compare* left (balance-first-amount right))
+      (error "Cannot compare* balances with amounts")))
 
 (defun sign (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
@@ -1502,6 +1561,9 @@
 
 (declaim (inline value-lessp value-lessp*))
 
+;; jww (2007-11-17): All of these needs to be made into generics, in case
+;; balances occur within a value expression.  Also, single amount balances
+;; should be regarded as amounts.
 (defun value-lessp (left right)
   (declare (type amount left))
   (declare (type amount right))
@@ -1587,11 +1649,12 @@
 	  (get-amounts-map balance))
     value-balance))
 
-(defmethod value-round ((amount amount) &optional precision)
-  (let ((tmp (copy-amount amount)))
-    (value-round* tmp precision)))
+(defun value-round (amount &optional precision)
+  (declare (type amount amount))
+  (value-round* (copy-amount amount) precision))
 
-(defmethod value-round* ((amount amount) &optional precision)
+(defun value-round* (amount &optional precision)
+  (declare (type amount amount))
   "Round the given AMOUNT to the stated internal PRECISION.
   If PRECISION is less than the current internal precision, data will
   be lost.  If it is greater, the integer value of the amount is
@@ -1625,6 +1688,7 @@
 
 (defmethod negate ((balance balance))
   (let ((tmp (copy-balance balance)))
+    ;; jww (2007-11-17): NYI
     ;; (negate* tmp)
     (assert tmp)
     ))
@@ -1875,8 +1939,7 @@
   left)
 
 (defmethod multiply ((left amount) (right amount))
-  (let ((tmp (copy-amount left)))
-    (multiply* tmp right)))
+  (multiply* (copy-amount left) right))
 (defmethod multiply* ((left amount) (right amount))
   (setf (amount-quantity left)
 	(* (amount-quantity left)
@@ -1936,8 +1999,7 @@
   (divide* (integer-to-amount left) right))
 
 (defmethod divide ((left amount) (right amount))
-  (let ((tmp (copy-amount left)))
-    (divide* tmp right)))
+  (divide* (copy-amount left) right))
 (defmethod divide* ((left amount) (right amount))
   ;; Increase the value's precision, to capture fractional parts after
   ;; the divide.  Round up in the last position.
