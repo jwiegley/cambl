@@ -253,6 +253,8 @@
 	   parse-datetime
 	   format-datetime
 
+	   value
+	   valuep
 	   amount
 	   amountp
 	   amount*
@@ -279,7 +281,6 @@
 	   copy-from-balance
 	   copy-value
 
-	   valuep
 	   value-zerop
 	   value-zerop*
 	   value-minusp
@@ -391,6 +392,13 @@
 
 (deftype datetime ()
   'local-time:local-time)
+
+(deftype value ()
+  '(or integer amount balance))
+
+(declaim (inline valuep))
+(defun valuep (object)
+  (typep object 'value))
 
 ;;;_ - COMMODITY-SYMBOL
 
@@ -1281,10 +1289,6 @@
 (defun cost-balance-p (object)
   (typep object 'cost-balance))
 
-(declaim (inline valuep))
-(defun valuep (object)
-  (typep object '(or amount balance cost-balance)))
-
 ;;;_  + Copiers
 
 (defmethod copy-value ((amount amount))
@@ -1803,8 +1807,10 @@
   (add* (copy-balance left) right))
 (defmethod add* ((left balance) (right balance))
   (mapc #'(lambda (entry)
+	    (format t "entry = ~S~%" entry)
 	    (add* left (cdr entry)))
-	(get-amounts-map right)))
+	(get-amounts-map right))
+  left)
 
 ;;;_   : Subtraction
 
@@ -1896,7 +1902,8 @@
 (defmethod subtract* ((left balance) (right balance))
   (mapc #'(lambda (entry)
 	    (subtract* left (cdr entry)))
-	(get-amounts-map right)))
+	(get-amounts-map right))
+  left)
 
 ;;;_   : Multiplication
 
