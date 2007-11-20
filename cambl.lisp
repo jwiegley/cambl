@@ -1807,7 +1807,6 @@
   (add* (copy-balance left) right))
 (defmethod add* ((left balance) (right balance))
   (mapc #'(lambda (entry)
-	    (format t "entry = ~S~%" entry)
 	    (add* left (cdr entry)))
 	(get-amounts-map right))
   left)
