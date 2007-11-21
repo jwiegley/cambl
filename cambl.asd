@@ -42,8 +42,10 @@ for diagnostic output.")
 
 (export '*cambl-version*)
 
+(pushnew :periods-use-parser *features*)
+
 (asdf:defsystem :cambl
   :serial t
   :version #.*cambl-version*
-  :depends-on (:red-black :local-time)
+  :depends-on (:red-black :local-time :periods)
   :components ((:file "cambl")))
