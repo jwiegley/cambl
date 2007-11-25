@@ -52,9 +52,9 @@
 ;; There are just a few main entry points to the CAMBL library for dealing
 ;; with amounts (which is mainly how you'll use it).  Here is a quick list,
 ;; following by a description in the context of a REPL session.  Note that
-;; where the name contains value, it will work for integers, amounts, balances
-;; and cost balances.  If it contains amount or balance, it only operates on
-;; entities of that type.
+;; where the name contains value, it will work for integers, amounts and
+;; balances.  If it contains amount or balance, it only operates on entities
+;; of that type.
 ;;
 ;;   amount[*]          ; create an amount from a string
 ;;   exact-amount       ; create an amount from a string which overrides
@@ -233,7 +233,6 @@
 
 ;;;_* Todo
 ;;
-;; - cost balances: everything
 ;; - commodity stripping
 ;; - test commodity conversions
 ;; - downloading quotes
@@ -266,9 +265,6 @@
 	   balancep
 	   get-amounts-map
 	   amount-in-balance
-
-	   cost-balance
-	   cost-balancep
 
 	   copy-amount
 	   copy-balance
@@ -546,11 +542,6 @@
 	      (princ (cdr entry) stream))
 	  (get-amounts-map balance))))
 
-;;;_ + COST-BALANCE
-
-(defclass cost-balance (balance)
-  ((costs-map  :accessor get-costs-map :initform nil)))
-
 ;;;_* Generics
 
 ;;;_ + Public generics
@@ -558,9 +549,9 @@
 ;; - If the argument says item, this means:
 ;;   amount, commodity, annotated-commodity, null
 ;; - If the argument says any-item, this means:
-;;   amount, balance, cost-balance, commodity, annotated-commodity, null
+;;   amount, balance, commodity, annotated-commodity, null
 ;; - If it says value, this means:
-;;   amount, balance, cost-balance
+;;   amount, balance
 
 (defgeneric copy-value (value))
 
@@ -707,7 +698,7 @@
       (setf amount-or-commodity (get-referent-commodity amount-or-commodity)))
   (apply function (get-basic-commodity amount-or-commodity) args))
 
-;;;_ * AMOUNT, BALANCE and COST-BALANCE
+;;;_ * AMOUNT and BALANCE
 
 ;;;_  + Error class
 
@@ -965,10 +956,6 @@
 (defun balancep (object)
   (typep object 'balance))
 
-(declaim (inline cost-balance-p))
-(defun cost-balance-p (object)
-  (typep object 'cost-balance))
-
 ;;;_  + Copiers
 
 (defmethod copy-value ((amount amount))
@@ -997,9 +984,6 @@
 
 (defmethod copy-value ((balance balance))
   (copy-balance balance))
-
-(defmethod copy-value ((cost-balance cost-balance))
-  (copy-balance cost-balance))
 
 ;;;_  + Unary truth tests
 
