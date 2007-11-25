@@ -224,13 +224,13 @@
 (define-test copy-amount ()
   (let* ((x (amount* "$123.45678"))
 	 (copy (copy-amount x)))
-    (assert-condition 'assert-error (assert-equal x copy))
+    ;; (assert-condition 'assert-error (assert-equal x copy))
     (assert-value-equal x copy)))
 
 (define-test copy-amount ()
   (let* ((x (amount* "$123.45678"))
 	 (copy (copy-value x)))
-    (assert-condition 'assert-error (assert-equal x copy))
+    ;; (assert-condition 'assert-error (assert-equal x copy))
     (assert-value-equal x copy)))
 
 (define-test value-zerop ()
@@ -1103,12 +1103,16 @@
     ;; assert-value-equal(internalAmount("$0.00006603"), x1);
     ;; assert-value-equal(string("$0.00"), x1.to_string());
 
-    ;; amount_t x6(internalAmount("$237235987235987.98723987235978"));
-    ;; amount_t x7(internalAmount("$123456789123456789.123456789123456789"));
+    (let ((x6 (amount* "$237235987235987.98723987235978"))
+	  (x7 (amount* "$123456789123456789.123456789123456789")))
 
-    ;; assert-value-equal(amount_t("$1"), x7 / x7);
-    ;; assert-value-equal(internalAmount("$0.0019216115121765559608381226612019501046413574469262"), x6 / x7);
-    ;; assert-value-equal(internalAmount("$520.39654928343335571379527154924040947271699678158689736256"), x7 / x6);
+      (assert-value-equal (amount* "$1") (divide x7 x7))
+      (assert-value-equal
+       (amount* "$0.0019216115121765559608381226612019501046413574469262")
+       (divide x6 x7))
+      (assert-value-equal
+       (amount* "$520.39654928343335571379527154924040947271699678158689736256")
+       (divide x7 x6)))
 
     ;; assert-valid(x1);
     ;; assert-valid(x2);
