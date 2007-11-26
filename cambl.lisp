@@ -249,8 +249,9 @@
 	   value
 	   valuep
 	   amount
-	   amountp
+	   amount-p
 	   amount*
+	   amount-sans-commodity
 	   parse-amount
 	   parse-amount*
 	   exact-amount
@@ -262,7 +263,7 @@
 	   amount-quantity
 
 	   balance
-	   balancep
+	   balance-p
 	   get-amounts-map
 	   amount-in-balance
 
@@ -709,27 +710,35 @@
 
 ;;;_  + Create AMOUNT objects from strings
 
-(defun amount (text &key (reduce-to-smallest-units-p t)
+(defun amount (data &key (reduce-to-smallest-units-p t)
 	       (pool *default-commodity-pool*))
-  (declare (type string text))
-  (with-input-from-string (in text)
-    (read-amount in :observe-properties-p t
-		 :reduce-to-smallest-units-p reduce-to-smallest-units-p
-		 :pool pool)))
+  (etypecase data
+    (string
+     (with-input-from-string (in data)
+       (read-amount in :observe-properties-p t
+		       :reduce-to-smallest-units-p reduce-to-smallest-units-p
+		       :pool pool)))
+    (integer
+     (integer-to-amount data))))
 
-(defun amount* (text &key (reduce-to-smallest-units-p t)
+(defun amount* (data &key (reduce-to-smallest-units-p t)
 		(pool *default-commodity-pool*))
-  (declare (type string text))
-  (with-input-from-string (in text)
-    (read-amount in :observe-properties-p nil
-		 :reduce-to-smallest-units-p reduce-to-smallest-units-p
-		 :pool pool)))
+  (etypecase data
+    (string
+     (with-input-from-string (in data)
+       (read-amount in :observe-properties-p nil
+		       :reduce-to-smallest-units-p reduce-to-smallest-units-p
+		       :pool pool)))
+    (integer
+     (integer-to-amount data))))
 
-(declaim (ftype function parse-amount))
-(setf (fdefinition 'parse-amount) (fdefinition 'amount))
+(declaim (inline parse-amount))
+(defun parse-amount (&rest args)
+  (apply #'amount args))
 
-(declaim (ftype function parse-amount*))
-(setf (fdefinition 'parse-amount*) (fdefinition 'amount*))
+(declaim (inline parse-amount*))
+(defun parse-amount* (&rest args)
+  (apply #'amount args))
 
 (defun exact-amount (text &key (reduce-to-smallest-units-p t)
 		     (pool *default-commodity-pool*))
@@ -738,10 +747,6 @@
 		       :pool pool)))
     (setf (amount-keep-precision-p amount) t)
     amount))
-
-(declaim (inline amountp))
-(defun amountp (object)
-  (typep object 'amount))
 
 ;;;_  + Read AMOUNT objects from streams
 
@@ -881,20 +886,24 @@
 					  (or (char= #\. c)
 					      (char= #\, c))) quantity)))
 
-      (when (and commodity (or newly-created-p observe-properties-p))
-	;; Observe the commodity usage details we noticed while parsing
-	(setf (commodity-symbol-prefixed-p
-	       (commodity-symbol commodity)) prefixed-p)
-	(setf (commodity-symbol-connected-p
-	       (commodity-symbol commodity)) connected-p)
-	(if thousand-marks-p
-	    (setf (get-thousand-marks-p (commodity-base commodity))
-		  thousand-marks-p))
+      (if commodity
+	  (when (or newly-created-p observe-properties-p)
+	    ;; Observe the commodity usage details we noticed while parsing
+	    (setf (commodity-symbol-prefixed-p
+		   (commodity-symbol commodity)) prefixed-p)
+	    (setf (commodity-symbol-connected-p
+		   (commodity-symbol commodity)) connected-p)
+	    (if thousand-marks-p
+		(setf (get-thousand-marks-p (commodity-base commodity))
+		      thousand-marks-p))
 
-	(let ((precision (amount-precision amount)))
-	  (if (> precision (display-precision commodity))
-	      (setf (get-display-precision (commodity-base commodity))
-		    precision)))))
+	    (let ((precision (amount-precision amount)))
+	      (if (> precision (display-precision commodity))
+		  (setf (get-display-precision (commodity-base commodity))
+			precision))))
+	  ;; If the amount had no commodity at all, always preserve full
+	  ;; precision, as if the user had used `exact-amount'.
+	  (setf (amount-keep-precision-p amount) t)))
 
     (if negative-p
 	(negate* amount))
@@ -919,12 +928,6 @@
     amount))
 
 ;;;_  + Convert other values to and from AMOUNT
-
-(declaim (inline float-to-amount))
-
-(defun float-to-amount (value)
-  (declare (type float value))
-  (parse-amount* (format nil "~F" value)))
 
 (declaim (inline integer-to-amount))
 
@@ -952,17 +955,19 @@
       (add* tmp amount))
     tmp))
 
-(declaim (inline balancep))
-(defun balancep (object)
+(declaim (inline balance-p))
+(defun balance-p (object)
   (typep object 'balance))
 
 ;;;_  + Copiers
+
+(defmethod copy-value ((amount integer))
+  amount)
 
 (defmethod copy-value ((amount amount))
   (copy-amount amount))
 
 (declaim (inline copy-balance))
-
 (defun copy-balance (balance)
   (declare (type balance balance))
   (let ((tmp (make-instance 'balance)))
@@ -972,7 +977,6 @@
     tmp))
 
 (declaim (inline copy-from-balance))
-
 (defun copy-from-balance (balance)
   (declare (type balance balance))
   (let ((count (balance-commodity-count balance)))
@@ -987,10 +991,17 @@
 
 ;;;_  + Unary truth tests
 
+(declaim (inline value-maybe-round))
+(defun value-maybe-round (amount)
+  (declare (type amount amount))
+  (if (amount-keep-precision-p amount)
+      amount
+      (value-round amount)))
+
 (defmethod value-zerop ((integer integer))
   (cl:zerop integer))
 (defmethod value-zerop ((amount amount))
-  (cl:zerop (amount-quantity (value-round amount))))
+  (cl:zerop (amount-quantity (value-maybe-round amount))))
 (defmethod value-zerop ((balance balance))
   (block outer
     (mapc #'(lambda (entry)
@@ -1014,7 +1025,7 @@
 (defmethod value-minusp ((integer integer))
   (cl:minusp integer))
 (defmethod value-minusp ((amount amount))
-  (cl:minusp (amount-quantity (value-round amount))))
+  (cl:minusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-minusp ((balance balance))
   (block outer
     (mapc #'(lambda (entry)
@@ -1038,7 +1049,7 @@
 (defmethod value-plusp ((integer integer))
   (cl:plusp integer))
 (defmethod value-plusp ((amount amount))
-  (cl:plusp (amount-quantity (value-round amount))))
+  (cl:plusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-plusp ((balance balance))
   (block outer
     (mapc #'(lambda (entry)
@@ -1060,25 +1071,24 @@
     t))
 
 (defun value-basic-truth (result zerop-test-func)
-  (cond
-    ((or (typep result 'cambl:amount)
-	 (typep result 'cambl:balance))
+  (etypecase result
+    (amount
      (not (funcall zerop-test-func result)))
-    ((typep result 'integer)
+    (balance
+     (not (funcall zerop-test-func result)))
+    (integer
      (not (zerop result)))
-    ((typep result 'string)
+    (string
      (> (length result) 0))
-    ((typep result 'fixed-time)
+    (fixed-time
      ;; jww (2007-11-11): NYI
      nil)
-    ((typep result 'boolean)
-     result)
-    (t
-     (error "Cannot determine truth of '~S'" result))))
+    (boolean
+     result)))
 
+(declaim (inline value-truth value-truth*))
 (defun value-truth (result)
   (value-basic-truth result #'value-zerop))
-
 (defun value-truth* (result)
   (value-basic-truth result #'value-zerop*))
 
@@ -1114,42 +1124,71 @@
 		     (commodity-name left)
 		     (commodity-name right))))))
 
+(defmethod compare ((left integer) (right integer))
+  (- left right))
+(defmethod compare ((left amount) (right integer))
+  (let ((tmp (integer-to-amount right))
+	(left-rounded (value-maybe-round left)))
+    (compare* left-rounded tmp)))
+(defmethod compare ((left integer) (right amount))
+  (let ((tmp (integer-to-amount left))
+	(right-rounded (value-maybe-round right)))
+    (compare* tmp right-rounded)))
 (defmethod compare ((left amount) (right amount))
   (verify-amounts left right "Comparing")
-  (let ((left-rounded (value-round left))
-	(right-rounded (value-round right)))
+  (let ((left-rounded (value-maybe-round left))
+	(right-rounded (value-maybe-round right)))
     (compare* left-rounded right-rounded)))
+(defmethod compare ((left balance) (right integer))
+  (if (= (balance-commodity-count left) 1)
+      (compare (balance-first-amount left) right)
+      (error "Cannot compare balances with integers")))
 (defmethod compare ((left balance) (right amount))
   (if (= (balance-commodity-count left) 1)
       (compare (balance-first-amount left) right)
       (error "Cannot compare balances with amounts")))
+(defmethod compare ((left integer) (right balance))
+  (if (= (balance-commodity-count right) 1)
+      (compare left (balance-first-amount right))
+      (error "Cannot compare balances with integers")))
 (defmethod compare ((left amount) (right balance))
   (if (= (balance-commodity-count right) 1)
       (compare left (balance-first-amount right))
       (error "Cannot compare balances with amounts")))
 
+(defmethod compare* ((left integer) (right integer))
+  (- left right))
+(defmethod compare* ((left amount) (right integer))
+  (compare* left (integer-to-amount right)))
+(defmethod compare* ((left integer) (right amount))
+  (compare* (integer-to-amount left) right))
+
 (defmethod compare* ((left amount) (right amount))
   (verify-amounts left right "Exactly comparing")
   (the integer
-    (cond ((= (amount-precision left)
-	      (amount-precision right))
-	   (- (amount-quantity left)
-	      (amount-quantity right)))
-	  ((< (amount-precision left)
-	      (amount-precision right))
+    (cond ((= (amount-precision left) (amount-precision right))
+	   (- (amount-quantity left) (amount-quantity right)))
+	  ((< (amount-precision left) (amount-precision right))
 	   (let ((tmp (copy-amount left)))
 	     (amount--resize tmp (amount-precision right))
-	     (- (amount-quantity tmp)
-		(amount-quantity right))))
+	     (- (amount-quantity tmp) (amount-quantity right))))
 	  (t
 	   (let ((tmp (copy-amount right)))
 	     (amount--resize tmp (amount-precision left))
-	     (- (amount-quantity left)
-		(amount-quantity tmp)))))))
+	     (- (amount-quantity left) (amount-quantity tmp)))))))
+
+(defmethod compare* ((left balance) (right integer))
+  (if (= (balance-commodity-count left) 1)
+      (compare* (balance-first-amount left) right)
+      (error "Cannot compare* balances with integers")))
 (defmethod compare* ((left balance) (right amount))
   (if (= (balance-commodity-count left) 1)
       (compare* (balance-first-amount left) right)
       (error "Cannot compare* balances with amounts")))
+(defmethod compare* ((left integer) (right balance))
+  (if (= (balance-commodity-count right) 1)
+      (compare* left (balance-first-amount right))
+      (error "Cannot compare* balances with integers")))
 (defmethod compare* ((left amount) (right balance))
   (if (= (balance-commodity-count right) 1)
       (compare* left (balance-first-amount right))
@@ -1157,17 +1196,26 @@
 
 (defun sign (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
-  (sign* (value-round amount)))
+  (etypecase amount
+    (integer (sign* amount))
+    (amount (sign* (value-maybe-round amount)))))
 
 (defun sign* (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
-  (assert amount)
-  (let ((quantity (amount-quantity amount)))
-    (if (cl:minusp quantity)
-	-1
-	(if (cl:plusp quantity)
-	    1
-	    0))))
+  (etypecase amount
+    (integer
+     (if (cl:minusp amount)
+	 -1
+	 (if (cl:plusp amount)
+	     1
+	     0)))
+    (amount
+     (let ((quantity (amount-quantity amount)))
+       (if (cl:minusp quantity)
+	   -1
+	   (if (cl:plusp quantity)
+	       1
+	       0))))))
 
 ;;;_  + Equality tests
 
@@ -1202,107 +1250,162 @@
 	   left-amounts-map)
 	  t)))))
 
+(defmethod value-equal ((left integer) (right integer))
+  (equal left right))
+(defmethod value-equal ((left amount) (right integer))
+  (cl:zerop (compare* left right)))
+(defmethod value-equal ((left integer) (right amount))
+  (cl:zerop (compare* left right)))
 (defmethod value-equal ((left amount) (right amount))
   (cl:zerop (compare* left right)))
-(defmethod value-equal ((left amount) (right balance))
-  (amount-balance-equal left right #'value-equal))
+(defmethod value-equal ((left balance) (right integer))
+  (amount-balance-equal right left #'value-equal))
 (defmethod value-equal ((left balance) (right amount))
   (amount-balance-equal right left #'value-equal))
+(defmethod value-equal ((left integer) (right balance))
+  (amount-balance-equal left right #'value-equal))
+(defmethod value-equal ((left amount) (right balance))
+  (amount-balance-equal left right #'value-equal))
 (defmethod value-equal ((left balance) (right balance))
   (balance-equal left right #'value-equal))
 
+(defmethod value-equalp ((left integer) (right integer))
+  (equalp left right))
+(defmethod value-equalp ((left amount) (right integer))
+  (cl:zerop (compare left right)))
+(defmethod value-equalp ((left integer) (right amount))
+  (cl:zerop (compare left right)))
 (defmethod value-equalp ((left amount) (right amount))
   (cl:zerop (compare left right)))
-(defmethod value-equalp ((left amount) (right balance))
-  (amount-balance-equal left right #'value-equalp))
+(defmethod value-equalp ((left balance) (right integer))
+  (amount-balance-equal right left #'value-equalp))
 (defmethod value-equalp ((left balance) (right amount))
   (amount-balance-equal right left #'value-equalp))
+(defmethod value-equalp ((left integer) (right balance))
+  (amount-balance-equal left right #'value-equalp))
+(defmethod value-equalp ((left amount) (right balance))
+  (amount-balance-equal left right #'value-equalp))
 (defmethod value-equalp ((left balance) (right balance))
   (balance-equal left right #'value-equalp))
 
+(defmethod value-not-equal ((left integer) (right integer))
+  (not (equal left right)))
+(defmethod value-not-equal ((left amount) (right integer))
+  (not (cl:zerop (compare* left right))))
+(defmethod value-not-equal ((left integer) (right amount))
+  (not (cl:zerop (compare* left right))))
+(defmethod value-not-equal ((left amount) (right amount))
+  (not (cl:zerop (compare* left right))))
+(defmethod value-not-equal ((left balance) (right integer))
+  (not (amount-balance-equal right left #'value-equal)))
+(defmethod value-not-equal ((left balance) (right amount))
+  (not (amount-balance-equal right left #'value-equal)))
+(defmethod value-not-equal ((left integer) (right balance))
+  (not (amount-balance-equal left right #'value-equal)))
+(defmethod value-not-equal ((left amount) (right balance))
+  (not (amount-balance-equal left right #'value-equal)))
+(defmethod value-not-equal ((left balance) (right balance))
+  (not (balance-equal left right #'value-equal)))
+
+(defmethod value-not-equalp ((left integer) (right integer))
+  (not (equalp left right)))
+(defmethod value-not-equalp ((left amount) (right integer))
+  (not (cl:zerop (compare left right))))
+(defmethod value-not-equalp ((left integer) (right amount))
+  (not (cl:zerop (compare left right))))
+(defmethod value-not-equalp ((left amount) (right amount))
+  (not (cl:zerop (compare left right))))
+(defmethod value-not-equalp ((left balance) (right integer))
+  (not (amount-balance-equal right left #'value-equalp)))
+(defmethod value-not-equalp ((left balance) (right amount))
+  (not (amount-balance-equal right left #'value-equalp)))
+(defmethod value-not-equalp ((left integer) (right balance))
+  (not (amount-balance-equal left right #'value-equalp)))
+(defmethod value-not-equalp ((left amount) (right balance))
+  (not (amount-balance-equal left right #'value-equalp)))
+(defmethod value-not-equalp ((left balance) (right balance))
+  (not (balance-equal left right #'value-equalp)))
+
+(defmethod value= ((left integer) (right integer))
+  (value-equalp left right))
+(defmethod value= ((left amount) (right integer))
+  (value-equalp left right))
+(defmethod value= ((left integer) (right amount))
+  (value-equalp left right))
 (defmethod value= ((left amount) (right amount))
   (value-equalp left right))
+(defmethod value= ((left balance) (right integer))
+  (value-equalp left right))
+(defmethod value= ((left balance) (right amount))
+  (value-equalp left right))
+(defmethod value= ((left integer) (right balance))
+  (value-equalp left right))
+(defmethod value= ((left amount) (right balance))
+  (value-equalp left right))
+(defmethod value= ((left balance) (right balance))
+  (value-equalp left right))
+
+(defmethod value/= ((left integer) (right integer))
+  (not (value-equalp left right)))
+(defmethod value/= ((left amount) (right integer))
+  (not (value-equalp left right)))
+(defmethod value/= ((left integer) (right amount))
+  (not (value-equalp left right)))
 (defmethod value/= ((left amount) (right amount))
+  (not (value-equalp left right)))
+(defmethod value/= ((left balance) (right integer))
+  (not (value-equalp left right)))
+(defmethod value/= ((left balance) (right amount))
+  (not (value-equalp left right)))
+(defmethod value/= ((left integer) (right balance))
+  (not (value-equalp left right)))
+(defmethod value/= ((left amount) (right balance))
+  (not (value-equalp left right)))
+(defmethod value/= ((left balance) (right balance))
   (not (value-equalp left right)))
 
 ;;;_  + Comparison tests
 
 (declaim (inline value-lessp value-lessp*))
-
-;; jww (2007-11-17): All of these needs to be made into generics, in case
-;; balances occur within a value expression.  Also, single amount balances
-;; should be regarded as amounts.
 (defun value-lessp (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:minusp (compare left right)))
-
 (defun value-lessp* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:minusp (compare* left right)))
 
 (declaim (inline value-lesseqp value-lesseqp*))
-
 (defun value-lesseqp (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (<= (compare left right) 0))
-
 (defun value-lesseqp* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (<= (compare* left right) 0))
 
 (declaim (inline value< value<=))
-
 (defun value< (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:minusp (compare left right)))
-
 (defun value<= (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (<= (compare left right) 0))
 
 (declaim (inline value-greaterp value-greaterp*))
-
 (defun value-greaterp (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:plusp (compare left right)))
-
 (defun value-greaterp* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:plusp (compare* left right)))
 
 (declaim (inline value-greatereqp value-greatereqp*))
-
 (defun value-greatereqp (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (>= (compare left right) 0))
-
 (defun value-greatereqp* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (>= (compare* left right) 0))
 
 (declaim (inline value> value>=))
-
 (defun value> (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (cl:plusp (compare left right)))
-
 (defun value>= (left right)
-  (declare (type amount left))
-  (declare (type amount right))
   (>= (compare left right) 0))
 
 ;;;_  + Unary math operators
+
+(defmethod value-abs ((integer integer))
+  (abs integer))
 
 (defmethod value-abs ((amount amount))
   (assert amount)
@@ -1318,34 +1421,28 @@
     value-balance))
 
 (defun value-round (amount &optional precision)
-  (declare (type amount amount))
   (value-round* (copy-amount amount) precision))
 
 (defun value-round* (amount &optional precision)
-  (declare (type amount amount))
   "Round the given AMOUNT to the stated internal PRECISION.
   If PRECISION is less than the current internal precision, data will
-  be lost.  If it is greater, the integer value of the amount is
-  increased until the target precision is reached."
-  (unless precision
-    (let ((commodity (amount-commodity amount)))
-      (if commodity
-	  (setf precision (display-precision commodity))
-	  (setf precision 0))))
+  be lost.  If it is greater, this operation has no effect."
+  (etypecase amount
+    (integer amount)
+    (amount
+     (unless precision
+       (let ((commodity (amount-commodity amount)))
+	 (setf precision (if commodity
+			     (display-precision commodity)
+			     0))))
 
-  (let ((internal-precision (amount-precision amount)))
-    (cond ((< precision internal-precision)
+     (let ((internal-precision (amount-precision amount)))
+       (if (< precision internal-precision)
 	   (setf (amount-quantity amount)
-		 (nth-value 0 (truncate (amount-quantity amount)
-					(expt 10 (- internal-precision
-						    precision)))))
-	   (setf (amount-precision amount) precision))
-	  ((> precision internal-precision)
-	   (setf (amount-quantity amount)
-		 (* (amount-quantity amount)
-		    (expt 10 (- precision internal-precision))))
-	   (setf (amount-precision amount) precision))))
-  amount)
+		 (round (amount-quantity amount)
+			(expt 10 (- internal-precision precision)))
+		 (amount-precision amount) precision)))
+     amount)))
 
 (defmethod negate ((integer integer))
   (- integer))
@@ -1394,19 +1491,29 @@
 
 (defmethod add ((left integer) (right integer))
   (+ left right))
-(defmethod add* ((left integer) (right integer))
-  (+ left right))
 (defmethod add ((left amount) (right integer))
   (add* (copy-amount left) (integer-to-amount right)))
-(defmethod add* ((left amount) (right integer))
-  (add* left (integer-to-amount right)))
 (defmethod add ((left integer) (right amount))
   (add* (integer-to-amount left) right))
-(defmethod add* ((left integer) (right amount))
-  (add* (integer-to-amount left) right))
-
 (defmethod add ((left amount) (right amount))
   (add* (copy-amount left) right))
+(defmethod add ((left balance) (right integer))
+  (add* (copy-balance left) (integer-to-amount right)))
+(defmethod add ((left balance) (right amount))
+  (add* (copy-balance left) right))
+(defmethod add ((left integer) (right balance))
+  (add* (integer-to-amount left) right))
+(defmethod add ((left amount) (right balance))
+  (add* (copy-balance right) left))
+(defmethod add ((left balance) (right balance))
+  (add* (copy-balance left) right))
+
+(defmethod add* ((left integer) (right integer))
+  (error 'amount-error :msg "Integers do not support in-place addition"))
+(defmethod add* ((left amount) (right integer))
+  (add* left (integer-to-amount right)))
+(defmethod add* ((left integer) (right amount))
+  (error 'amount-error :msg "Integers do not support in-place addition"))
 (defmethod add* ((left amount) (right amount))
   (the (or amount balance)
     (if (commodity-equal (amount-commodity left)
@@ -1433,22 +1540,8 @@
 	  (add* tmp left)
 	  (add* tmp right)
 	  tmp))))
-
-(defmethod add ((left balance) (right integer))
-  (add* (copy-balance left) (integer-to-amount right)))
 (defmethod add* ((left balance) (right integer))
   (add* left (integer-to-amount right)))
-(defmethod add ((left integer) (right balance))
-  (add* (integer-to-amount left) right))
-(defmethod add* ((left integer) (right balance))
-  (add* (integer-to-amount left) right))
-
-(defmethod add ((left amount) (right balance))
-  (add right left))
-(defmethod add* ((left amount) (right balance))
-  (add right left))
-(defmethod add ((left balance) (right amount))
-  (add* (copy-balance left) right))
 (defmethod add* ((left balance) (right amount))
   (unless (value-zerop* right)
     (let ((current-amount (cdr (assoc (amount-commodity right)
@@ -1465,10 +1558,10 @@
 		  (sort (get-amounts-map left)
 			#'compare-amounts-visually))))))
   left)
-
-
-(defmethod add ((left balance) (right balance))
-  (add* (copy-balance left) right))
+(defmethod add* ((left integer) (right balance))
+  (error 'amount-error :msg "Integers do not support in-place addition"))
+(defmethod add* ((left amount) (right balance))
+  (add right left))
 (defmethod add* ((left balance) (right balance))
   (mapc #'(lambda (entry)
 	    (add* left (cdr entry)))
@@ -1479,19 +1572,30 @@
 
 (defmethod subtract ((left integer) (right integer))
   (- left right))
-(defmethod subtract* ((left integer) (right integer))
-  (- left right))
 (defmethod subtract ((left amount) (right integer))
   (subtract* (copy-amount left) (integer-to-amount right)))
-(defmethod subtract* ((left amount) (right integer))
-  (subtract* left (integer-to-amount right)))
 (defmethod subtract ((left integer) (right amount))
   (subtract* (integer-to-amount left) right))
-(defmethod subtract* ((left integer) (right amount))
-  (subtract* (integer-to-amount left) right))
-
 (defmethod subtract ((left amount) (right amount))
   (subtract* (copy-amount left) right))
+(defmethod subtract ((left balance) (right integer))
+  (subtract* (copy-balance left) (integer-to-amount right)))
+(defmethod subtract ((left balance) (right amount))
+  (subtract* (copy-balance left) right))
+(defmethod subtract ((left integer) (right balance))
+  (error 'amount-error :msg "Cannot subtract a BALANCE from an INTEGER"))
+(defmethod subtract ((left amount) (right balance))
+  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"))
+(defmethod subtract ((left balance) (right balance))
+  (subtract* (copy-balance left) right))
+
+(defmethod subtract* ((left integer) (right integer))
+  (error 'amount-error :msg "Integers do not support in-place subtraction"))
+(defmethod subtract* ((left amount) (right integer))
+  (subtract* left (integer-to-amount right)))
+(defmethod subtract* ((left integer) (right amount))
+  (error 'amount-error :msg "Integers do not support in-place subtraction"))
+
 (defmethod subtract* ((left amount) (right amount))
   (the (or amount balance)
     (if (commodity-equal (amount-commodity left)
@@ -1519,21 +1623,9 @@
 	  (add* tmp (negate right))
 	  tmp))))
 
-(defmethod subtract ((left balance) (right integer))
-  (subtract* (copy-balance left) (integer-to-amount right)))
 (defmethod subtract* ((left balance) (right integer))
   (subtract* left (integer-to-amount right)))
-(defmethod subtract ((left integer) (right balance))
-  (subtract* (integer-to-amount left) right))
-(defmethod subtract* ((left integer) (right balance))
-  (subtract* (integer-to-amount left) right))
 
-(defmethod subtract ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"))
-(defmethod subtract* ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"))
-(defmethod subtract ((left balance) (right amount))
-  (subtract* (copy-balance left) right))
 (defmethod subtract* ((left balance) (right amount))
   (unless (value-zerop* right)
     (let* ((amounts-map (get-amounts-map left))
@@ -1559,9 +1651,10 @@
 		  (get-amounts-map left))
 	    left)))))
 
-
-(defmethod subtract ((left balance) (right balance))
-  (subtract* (copy-balance left) right))
+(defmethod subtract* ((left integer) (right balance))
+  (error 'amount-error :msg "Integers do not support in-place subtraction"))
+(defmethod subtract* ((left amount) (right balance))
+  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"))
 (defmethod subtract* ((left balance) (right balance))
   (mapc #'(lambda (entry)
 	    (subtract* left (cdr entry)))
@@ -1572,21 +1665,31 @@
 
 (defmethod multiply ((left integer) (right integer))
   (* left right))
-(defmethod multiply* ((left integer) (right integer))
-  (* left right))
 (defmethod multiply ((left amount) (right integer))
   (multiply* (copy-amount left) (integer-to-amount right)))
-(defmethod multiply* ((left amount) (right integer))
-  (multiply* left (integer-to-amount right)))
 (defmethod multiply ((left integer) (right amount))
   (multiply* (integer-to-amount left) right))
+(defmethod multiply ((left amount) (right amount))
+  (multiply* (copy-amount left) right))
+(defmethod multiply ((left balance) (right integer))
+  (multiply* (copy-balance left) (integer-to-amount right)))
+(defmethod multiply ((left balance) (right amount))
+  (multiply* (copy-balance left) right))
+(defmethod multiply ((left integer) (right balance))
+  (error 'amount-error :msg "Cannot multiply an integer by a balance"))
+(defmethod multiply ((left amount) (right balance))
+  (error 'amount-error :msg "Cannot multiply an amount by a balance"))
+(defmethod multiply ((left balance) (right balance))
+  (error 'amount-error :msg "Cannot multiply a balance by another balance"))
+
+(defmethod multiply* ((left integer) (right integer))
+  (error 'amount-error :msg "Integers do not support in-place multiplication"))
+(defmethod multiply* ((left amount) (right integer))
+  (multiply* left (integer-to-amount right)))
 (defmethod multiply* ((left integer) (right amount))
-  (multiply* (integer-to-amount left) right))
+  (error 'amount-error :msg "Integers do not support in-place multiplication"))
 
 (defun set-amount-commodity-and-round* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
-
   (let ((commodity (amount-commodity left)))
     (unless commodity
       (setf (amount-commodity left)
@@ -1608,8 +1711,6 @@
 		(+ *extra-precision* commodity-precision))))))
   left)
 
-(defmethod multiply ((left amount) (right amount))
-  (multiply* (copy-amount left) right))
 (defmethod multiply* ((left amount) (right amount))
   (setf (amount-quantity left)
 	(* (amount-quantity left)
@@ -1619,17 +1720,9 @@
 	   (amount-precision right)))
   (set-amount-commodity-and-round* left right))
 
-(defmethod multiply ((left balance) (right integer))
-  (multiply* (copy-balance left) (integer-to-amount right)))
 (defmethod multiply* ((left balance) (right integer))
   (multiply* left (integer-to-amount right)))
-(defmethod multiply ((left integer) (right balance))
-  (multiply* (integer-to-amount left) right))
-(defmethod multiply* ((left integer) (right balance))
-  (multiply* (integer-to-amount left) right))
 
-(defmethod multiply ((left balance) (right amount))
-  (multiply* (copy-balance left) right))
 (defmethod multiply* ((left balance) (right amount))
   (cond ((value-zerop* right)
 	 right)
@@ -1643,13 +1736,10 @@
 	       (get-amounts-map left))
 	 left)))
 
-(defmethod multiply ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot multiply an amount by a balance"))
+(defmethod multiply* ((left integer) (right balance))
+  (error 'amount-error :msg "Integers do not support in-place multiplication"))
 (defmethod multiply* ((left amount) (right balance))
   (error 'amount-error :msg "Cannot multiply an amount by a balance"))
-
-(defmethod multiply ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot multiply a balance by another balance"))
 (defmethod multiply* ((left balance) (right balance))
   (error 'amount-error :msg "Cannot multiply a balance by another balance"))
 
@@ -1657,19 +1747,30 @@
 
 (defmethod divide ((left integer) (right integer))
   (round left right))
-(defmethod divide* ((left integer) (right integer))
-  (round left right))
 (defmethod divide ((left amount) (right integer))
   (divide* (copy-amount left) (integer-to-amount right)))
-(defmethod divide* ((left amount) (right integer))
-  (divide* left (integer-to-amount right)))
 (defmethod divide ((left integer) (right amount))
   (divide* (integer-to-amount left) right))
-(defmethod divide* ((left integer) (right amount))
-  (divide* (integer-to-amount left) right))
-
 (defmethod divide ((left amount) (right amount))
   (divide* (copy-amount left) right))
+(defmethod divide ((left balance) (right integer))
+  (divide* (copy-balance left) (integer-to-amount right)))
+(defmethod divide ((left balance) (right amount))
+  (divide* (copy-balance left) right))
+(defmethod divide ((left integer) (right balance))
+  (error 'amount-error :msg "Cannot divide an integer by a balance"))
+(defmethod divide ((left amount) (right balance))
+  (error 'amount-error :msg "Cannot divide an amount by a balance"))
+(defmethod divide ((left balance) (right balance))
+  (error 'amount-error :msg "Cannot divide a balance by another balance"))
+
+(defmethod divide* ((left integer) (right integer))
+  (error 'amount-error :msg "Integers do not support in-place division"))
+(defmethod divide* ((left amount) (right integer))
+  (divide* left (integer-to-amount right)))
+(defmethod divide* ((left integer) (right amount))
+  (error 'amount-error :msg "Integers do not support in-place division"))
+
 (defmethod divide* ((left amount) (right amount))
   ;; Increase the value's precision, to capture fractional parts after
   ;; the divide.  Round up in the last position.
@@ -1680,11 +1781,12 @@
 		     (format-value right :full-precision-p t))))
 
   (setf (amount-quantity left)
-	(round (* (amount-quantity left)
-		  (expt 10 (+ (1+ *extra-precision*)
-			      (* 2 (amount-precision right))
-			      (amount-precision left))))
-	       (amount-quantity right)))
+	(cl:round (* (amount-quantity left)
+		     (expt 10 (+ (1+ *extra-precision*)
+				 (* 2 (amount-precision right))
+				 (amount-precision left))))
+		  (amount-quantity right)))
+
   (setf (amount-precision left)
 	(+ *extra-precision* (* 2 (amount-precision left))
 	   (amount-precision right)))
@@ -1696,39 +1798,28 @@
 
   (set-amount-commodity-and-round* left right))
 
-(defmethod divide ((left balance) (right integer))
-  (divide* (copy-balance left) (integer-to-amount right)))
 (defmethod divide* ((left balance) (right integer))
   (divide* left (integer-to-amount right)))
-(defmethod divide ((left integer) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"))
-(defmethod divide* ((left integer) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"))
 
-(defmethod divide ((left balance) (right amount))
-  (divide* (copy-balance left) right))
 (defmethod divide* ((left balance) (right amount))
   (cond ((value-zerop* right)
 	 (error 'amount-error :msg "Divide by zero"))
 	((value-zerop* left)
 	 left)
 	(t
-	 ;; Multiplying by an amount causes all the balance's amounts to be
-	 ;; multiplied by the same factor.
+	 ;; Dividing by an amount causes all the balance's amounts to be
+	 ;; divided by the same factor.
 	 (mapc #'(lambda (entry)
 		   (divide* (cdr entry) right))
 	       (get-amounts-map left))
 	 left)))
 
-(defmethod divide ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"))
+(defmethod divide* ((left integer) (right balance))
+  (error 'amount-error :msg "Integers do not support in-place division"))
 (defmethod divide* ((left amount) (right balance))
   (error 'amount-error :msg "Cannot divide an amount by a balance"))
-
-(defmethod divide ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"))
 (defmethod divide* ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"))
+  (error 'amount-error :msg "Cannot divide a balance by another balance"))
 
 ;;;_ * BALANCE specific
 
@@ -1781,6 +1872,7 @@
 	 (commodity-symbol (and (not omit-commodity-p) commodity
 				(commodity-symbol commodity)))
 	 (precision (amount-precision amount))
+	 (quantity (amount-quantity amount))
 	 (display-precision
 	  (the fixnum
 	    (if (or (null commodity)
@@ -1798,18 +1890,15 @@
 		(> (length (commodity-symbol-name commodity-symbol)) 0)))
 
     (multiple-value-bind (quotient remainder)
-	(truncate (amount-quantity amount)
-		  (expt 10 precision))
-      (cond ((< display-precision precision)
-	     (setf remainder
-		   (nth-value 0 (truncate remainder
-					  (expt 10 (- precision
-						      display-precision))))))
-	    ((> display-precision precision)
-	     (setf remainder (* remainder
-				(expt 10 (- display-precision
-					    precision))))))
-
+	(truncate
+	 (cond
+	   ((> precision display-precision)
+	    (round quantity (expt 10 (- precision display-precision))))
+	   ((> display-precision precision)
+	    (* quantity (expt 10 (- display-precision precision))))
+	   (t
+	    quantity))
+	 (expt 10 display-precision))
 
       (let ((output
 	     (with-output-to-string (buffer)
@@ -1821,10 +1910,12 @@
 		   (princ (commodity-name amount) buffer)
 		   (maybe-gap))
 
+		 (if (cl:minusp quantity)
+		     (format buffer "-"))
 		 (format buffer "~:[~,,vD~;~,,v:D~]" ;
 			 (and commodity
 			      (commodity-thousand-marks-p commodity))
-			 (if *european-style* #\. #\,) quotient)
+			 (if *european-style* #\. #\,) (cl:abs quotient))
 
 		 (unless (cl:zerop display-precision)
 		   (format buffer "~C~v,'0D"
@@ -2237,7 +2328,8 @@
   (declare (type fixed-time it))
   (declare (type rbt:rbt-node root))
   (the (or pricing-entry null)
-    (loop with p = root
+    (loop
+       with p = root
        with last-found = nil
        named find-loop
        finally (return-from find-loop
@@ -2272,7 +2364,8 @@
       (when history
 	(if (null fixed-time)
 	    (progn
-	      (loop while (not (rbt:rbt-null (rbt:right history)))
+	      (loop
+		 while (not (rbt:rbt-null (rbt:right history)))
 		 do (setf history (rbt:right history)))
 	      (assert history)
 	      (setf pricing-entry (rbt:node-item history)))
@@ -2359,7 +2452,7 @@
   (assert balance))
 
 (defmethod convert-to-units ((amount amount) (commodity commodity))
-  ;; jww (2007-10-24): The `do' loop here are broken
+  ;; jww (2007-10-24): The `do' loops here are broken
   (unless (or (null (amount-commodity amount))
 	      (null commodity))
     (block nil
@@ -2402,9 +2495,8 @@
 		   (= 1 quotient))
 	(error 'amount-error :msg
 	       "First arg to `set-commodity-equivalence' must be of a single unit"))
-      (unless (> 1 (nth-value 0 (truncate
-				 (amount-quantity equivalent-amount)
-				 (expt 10 (amount-precision equivalent-amount)))))
+      (unless (> 1 (truncate (amount-quantity equivalent-amount)
+			     (expt 10 (amount-precision equivalent-amount))))
 	(error 'amount-error :msg
 	       "Second arg to `set-commodity-equivalence' must be more than a single unit"))
 
@@ -2681,9 +2773,6 @@
 	  (if (annotation-date annotation)
 	      (error 'amount-error :msg
 		     "Commodity annotation specifies more than one date"))
-
-	  ;; jww (2007-10-20): This code cannot work until I have a decent
-	  ;; Date/Time library for Common Lisp.
 
 	  (read-char in)
 	  (let* ((date-string

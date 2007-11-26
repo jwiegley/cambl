@@ -1,9 +1,5 @@
 ;; cambl-test.lisp
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (require :cambl)
-  (require :xlunit))
-
 (defpackage :cambl-test
   (:use :cl :cambl :xlunit)
   (:export :cambl-test-suite
@@ -16,14 +12,16 @@
   ()
   (:documentation "test-case for CAMBL commodities"))
 
-(defun assert-valid (object)
-  (assert object))
-
-(defun assert-value-equal (left right)
-  (assert (value= left right)))
-
-(defun assert-value-not-equal (left right)
-  (assert (not (value= left right))))
+(defmacro assert-valid (object)
+  `(assert ,object))
+(defmacro assert-value-equal (left right)
+  `(assert (value-equal ,left ,right)))
+(defmacro assert-value-equalp (left right)
+  `(assert (value= ,left ,right)))
+(defmacro assert-value-not-equal (left right)
+  `(assert (value-not-equal ,left ,right)))
+(defmacro assert-value-not-equalp (left right)
+  `(assert (value/= ,left ,right)))
 
 (def-test-method test-price-history ((test commodity-test-case) :run nil)
   ;; ptime jan17_07    = parse_datetime("2007/01/17 00:00:00");
@@ -37,29 +35,29 @@
   ;; amount_t x0;
   ;; amount_t x1("100.10 AAPL");
 
-  ;; assert-condition(x0.value(), amount_error);
-  ;; assert-false(x1.value());
+  ;; (assert-condition x0.value() amount_error)
+  ;; (assert-false x1.value())
 
   ;; // Commodities cannot be constructed by themselves, since a great
   ;; // deal of their state depends on how they were seen to be used.
   ;; commodity_t& aapl(x1.commodity());
 
-  ;; aapl.add_price(jan17_07, amount_t("$10.20"));
-  ;; aapl.add_price(feb27_07, amount_t("$13.40"));
-  ;; aapl.add_price(feb28_07, amount_t("$18.33"));
-  ;; aapl.add_price(feb28_07sbm, amount_t("$18.30"));
-  ;; aapl.add_price(mar01_07, amount_t("$19.50"));
-  ;; aapl.add_price(apr15_07, amount_t("$21.22"));
+  ;; aapl.add_price(jan17_07 amount_t("$10.20"));
+  ;; aapl.add_price(feb27_07 amount_t("$13.40"));
+  ;; aapl.add_price(feb28_07 amount_t("$18.33"));
+  ;; aapl.add_price(feb28_07sbm amount_t("$18.30"));
+  ;; aapl.add_price(mar01_07 amount_t("$19.50"));
+  ;; aapl.add_price(apr15_07 amount_t("$21.22"));
 
   ;; optional<amount_t> amt1 = x1.value(feb28_07sbm);
-  ;; assert-true(amt1);
-  ;; assert-value-equal(amount_t("$1831.83"), *amt1);
+  ;; (assert-true amt1)
+  ;; (assert-value-equal amount_t("$1831.83") *amt1)
 
   ;; optional<amount_t> amt2 = x1.value(now);
-  ;; assert-true(amt2);
-  ;; assert-value-equal(amount_t("$2124.12"), *amt2);
+  ;; (assert-true amt2)
+  ;; (assert-value-equal amount_t("$2124.12") *amt2)
 
-  ;; assert-valid(x1);
+  ;; (assert-valid x1)
   )
 
 (def-test-method test-lots ((test commodity-test-case) :run nil)
@@ -210,10 +208,10 @@
 		(format-value (read-string #'read-exact-amount
 					   "$0.0000"))))
 
-(define-test float-to-amount ()
-  (assert-equal "0.0" (format-value (float-to-amount 0.0)))
-  (assert-equal "2.10005" (format-value (float-to-amount 2.10005)))
-  (assert-equal "-2.10005" (format-value (float-to-amount -2.10005))))
+;; (define-test float-to-amount ()
+;;   (assert-equal "0.0" (format-value (float-to-amount 0.0)))
+;;   (assert-equal "2.10005" (format-value (float-to-amount 2.10005)))
+;;   (assert-equal "-2.10005" (format-value (float-to-amount -2.10005))))
 
 (define-test integer-to-amount ()
   (assert-equal "0" (format-value (integer-to-amount 0)))
@@ -241,9 +239,9 @@
   (assert-true (value-zerop (amount* "0000000")))
   (assert-true (value-zerop (amount* "0.0000000000000")))
   ;; It's would display as zero...
-  (assert-true (value-zerop (amount* "0.0000000000000000000000000000001")))
+  (assert-true (value-zerop (amount* "$0.0000000000000000000000000000001")))
   ;; But it's not *really* zero
-  (assert-false (value-zerop* (amount* "0.0000000000000000000000000000001"))))
+  (assert-false (value-zerop* (amount* "$0.0000000000000000000000000000001"))))
 
 (define-test value-plusp ()
   (assert-false (value-plusp (amount* "$0")))
@@ -253,9 +251,9 @@
   (assert-false (value-plusp (amount* "0000000")))
   (assert-false (value-plusp (amount* "0.0000000000000")))
   ;; It's would display as zero...
-  (assert-false (value-plusp (amount* "0.0000000000000000000000000000001")))
+  (assert-false (value-plusp (amount* "$0.0000000000000000000000000000001")))
   ;; But it's *really* plusp
-  (assert-true (value-plusp* (amount* "0.0000000000000000000000000000001")))
+  (assert-true (value-plusp* (amount* "$0.0000000000000000000000000000001")))
 
   (assert-true (value-plusp (amount* "$1")))
   (assert-false (value-plusp (amount* "$0.00000000001")))
@@ -263,9 +261,9 @@
   (assert-true (value-plusp (amount* "1")))
   (assert-true (value-plusp (amount* "10000000")))
   ;; It's would display as zero...
-  (assert-false (value-plusp (amount* "0.0000000000000000000000000000001")))
+  (assert-false (value-plusp (amount* "$0.0000000000000000000000000000001")))
   ;; But it's not *really* zero
-  (assert-true (value-plusp* (amount* "0.0000000000000000000000000000001"))))
+  (assert-true (value-plusp* (amount* "$0.0000000000000000000000000000001"))))
 
 (define-test value-minusp ()
   (assert-false (value-minusp (amount* "-$0")))
@@ -275,9 +273,9 @@
   (assert-false (value-minusp (amount* "-0000000")))
   (assert-false (value-minusp (amount* "-0.0000000000000")))
   ;; It's would display as zero...
-  (assert-false (value-minusp (amount* "-0.0000000000000000000000000000001")))
+  (assert-false (value-minusp (amount* "$-0.0000000000000000000000000000001")))
   ;; But it's *really* minusp
-  (assert-true (value-minusp* (amount* "-0.0000000000000000000000000000001")))
+  (assert-true (value-minusp* (amount* "$-0.0000000000000000000000000000001")))
 
   (assert-true (value-minusp (amount* "-$1")))
   (assert-false (value-minusp (amount* "-$0.00000000001")))
@@ -285,778 +283,505 @@
   (assert-true (value-minusp (amount* "-1")))
   (assert-true (value-minusp (amount* "-10000000")))
   ;; It's would display as zero...
-  (assert-false (value-minusp (amount* "-0.0000000000000000000000000000001")))
+  (assert-false (value-minusp (amount* "$-0.0000000000000000000000000000001")))
   ;; But it's not *really* zero
-  (assert-true (value-minusp* (amount* "-0.0000000000000000000000000000001"))))
-
-(define-test constructors ()
-  ;; amount_t x0;
-  ;; amount_t x1(123456L);
-  ;; amount_t x2(123456UL);
-  ;; amount_t x3(123.456);
-  ;; amount_t x5("123456");
-  ;; amount_t x6("123.456");
-  ;; amount_t x7(string("123456"));
-  ;; amount_t x8(string("123.456"));
-  ;; amount_t x9(x3);
-  ;; amount_t x10(x6);
-  ;; amount_t x11(x8);
-
-  ;; assert-condition(amount_t(0L) == x0, amount_error);
-  ;; assert-condition(amount_t() == x0, amount_error);
-  ;; assert-condition(amount_t("0") == x0, amount_error);
-  ;; assert-condition(amount_t("0.0") == x0, amount_error);
-  ;; assert-value-equal(x2, x1);
-  ;; assert-value-equal(x5, x1);
-  ;; assert-value-equal(x7, x1);
-  ;; assert-value-equal(x6, x3);
-  ;; assert-value-equal(x8, x3);
-  ;; assert-value-equal(x10, x3);
-  ;; assert-value-equal(x10, x9);
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  ;; assert-valid(x11);
-  )
-
-(define-test commodity-constructors ()
-  ;; amount_t x1("$123.45");
-  ;; amount_t x2("-$123.45");
-  ;; amount_t x3("$-123.45");
-  ;; amount_t x4("DM 123.45");
-  ;; amount_t x5("-DM 123.45");
-  ;; amount_t x6("DM -123.45");
-  ;; amount_t x7("123.45 euro");
-  ;; amount_t x8("-123.45 euro");
-  ;; amount_t x9("123.45€");
-  ;; amount_t x10("-123.45€");
-
-  ;; assert-value-equal(amount_t("$123.45"), x1);
-  ;; assert-value-equal(amount_t("-$123.45"), x2);
-  ;; assert-value-equal(amount_t("$-123.45"), x3);
-  ;; assert-value-equal(amount_t("DM 123.45"), x4);
-  ;; assert-value-equal(amount_t("-DM 123.45"), x5);
-  ;; assert-value-equal(amount_t("DM -123.45"), x6);
-  ;; assert-value-equal(amount_t("123.45 euro"), x7);
-  ;; assert-value-equal(amount_t("-123.45 euro"), x8);
-  ;; assert-value-equal(amount_t("123.45€"), x9);
-  ;; assert-value-equal(amount_t("-123.45€"), x10);
-
-  ;; assert-value-equal(string("$123.45"), x1.to_string());
-  ;; assert-value-equal(string("$-123.45"), x2.to_string());
-  ;; assert-value-equal(string("$-123.45"), x3.to_string());
-  ;; assert-value-equal(string("DM 123.45"), x4.to_string());
-  ;; assert-value-equal(string("DM -123.45"), x5.to_string());
-  ;; assert-value-equal(string("DM -123.45"), x6.to_string());
-  ;; assert-value-equal(string("123.45 euro"), x7.to_string());
-  ;; assert-value-equal(string("-123.45 euro"), x8.to_string());
-  ;; assert-value-equal(string("123.45€"), x9.to_string());
-  ;; assert-value-equal(string("-123.45€"), x10.to_string());
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
-
-(define-test assignment ()
-  ;; amount_t x0;
-  ;; amount_t x1;
-  ;; amount_t x2;
-  ;; amount_t x3;
-  ;; amount_t x5;
-  ;; amount_t x6;
-  ;; amount_t x7;
-  ;; amount_t x8;
-  ;; amount_t x9;
-  ;; amount_t x10;
-
-  ;; x1  = 123456L;
-  ;; x2  = 123456UL;
-  ;; x3  = 123.456;
-  ;; x5  = "123456";
-  ;; x6  = "123.456";
-  ;; x7  = string("123456");
-  ;; x8  = string("123.456");
-  ;; x9  = x3;
-  ;; x10 = amount_t(x6);
-
-  ;; assert-value-equal(x2, x1);
-  ;; assert-value-equal(x5, x1);
-  ;; assert-value-equal(x7, x1);
-  ;; assert-value-equal(x6, x3);
-  ;; assert-value-equal(x8, x3);
-  ;; assert-value-equal(x10, x3);
-  ;; assert-value-equal(x10, x9);
-
-  ;; assert-false(x1.is_null());
-  ;; x1 = x0;			// sets x1 back to uninitialized state
-  ;; assert-true(x0.is_null());
-  ;; assert-true(x1.is_null());
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
-
-(define-test commodity-assignment ()
-  ;; amount_t x1;
-  ;; amount_t x2;
-  ;; amount_t x3;
-  ;; amount_t x4;
-  ;; amount_t x5;
-  ;; amount_t x6;
-  ;; amount_t x7;
-  ;; amount_t x8;
-  ;; amount_t x9;
-  ;; amount_t x10;
-
-  ;; x1  = "$123.45";
-  ;; x2  = "-$123.45";
-  ;; x3  = "$-123.45";
-  ;; x4  = "DM 123.45";
-  ;; x5  = "-DM 123.45";
-  ;; x6  = "DM -123.45";
-  ;; x7  = "123.45 euro";
-  ;; x8  = "-123.45 euro";
-  ;; x9  = "123.45€";
-  ;; x10 = "-123.45€";
-
-  ;; assert-value-equal(amount_t("$123.45"), x1);
-  ;; assert-value-equal(amount_t("-$123.45"), x2);
-  ;; assert-value-equal(amount_t("$-123.45"), x3);
-  ;; assert-value-equal(amount_t("DM 123.45"), x4);
-  ;; assert-value-equal(amount_t("-DM 123.45"), x5);
-  ;; assert-value-equal(amount_t("DM -123.45"), x6);
-  ;; assert-value-equal(amount_t("123.45 euro"), x7);
-  ;; assert-value-equal(amount_t("-123.45 euro"), x8);
-  ;; assert-value-equal(amount_t("123.45€"), x9);
-  ;; assert-value-equal(amount_t("-123.45€"), x10);
-
-  ;; assert-value-equal(string("$123.45"), x1.to_string());
-  ;; assert-value-equal(string("$-123.45"), x2.to_string());
-  ;; assert-value-equal(string("$-123.45"), x3.to_string());
-  ;; assert-value-equal(string("DM 123.45"), x4.to_string());
-  ;; assert-value-equal(string("DM -123.45"), x5.to_string());
-  ;; assert-value-equal(string("DM -123.45"), x6.to_string());
-  ;; assert-value-equal(string("123.45 euro"), x7.to_string());
-  ;; assert-value-equal(string("-123.45 euro"), x8.to_string());
-  ;; assert-value-equal(string("123.45€"), x9.to_string());
-  ;; assert-value-equal(string("-123.45€"), x10.to_string());
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
+  (assert-true (value-minusp* (amount* "$-0.0000000000000000000000000000001"))))
 
 (define-test equality ()
-  ;; amount_t x1(123456L);
-  ;; amount_t x2(456789L);
-  ;; amount_t x3(333333L);
-  ;; amount_t x4(123456.0);
-  ;; amount_t x5("123456.0");
-  ;; amount_t x6(123456.0F);
+  (let ((x1 123456)
+	(x2 456789)
+	(x3 333333)
+	(x4 (amount "123456.0"))
+	(x5 (amount* "123456.0"))
+	(x6 (amount "123456.0")))
 
-  ;; assert-true(x1 == 123456L);
-  ;; assert-true(x1 != x2);
-  ;; assert-true(x1 == (x2 - x3));
-  ;; assert-true(x1 == x4);
-  ;; assert-true(x4 == x5);
-  ;; assert-true(x4 == x6);
+    (assert-true (value= x1 123456))
+    (assert-true (value/= x1 x2))
+    (assert-true (value= x1 (subtract x2 x3)))
+    (assert-true (value= x1 x4))
+    (assert-true (value= x4 x5))
+    (assert-true (value= x4 x6))
 
-  ;; assert-true(x1 == 123456L);
-  ;; assert-true(123456L == x1);
-  ;; assert-true(x1 == 123456UL);
-  ;; assert-true(123456UL == x1);
-  ;; assert-true(x1 == 123456.0);
-  ;; assert-true(123456.0 == x1);
+    (assert-true (value= x1 123456))
+    (assert-true (value= 123456 x1))
+    (assert-true (value= x1 123456))
+    (assert-true (value= 123456 x1))
+    (assert-true (value= x1 (amount "123456.0")))
+    (assert-true (value= (amount "123456.0") x1))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    (assert-valid x5)
+    (assert-valid x6)))
 
 (define-test commodity-equality ()
-  ;; amount_t x0;
-  ;; amount_t x1;
-  ;; amount_t x2;
-  ;; amount_t x3;
-  ;; amount_t x4;
-  ;; amount_t x5;
-  ;; amount_t x6;
-  ;; amount_t x7;
-  ;; amount_t x8;
-  ;; amount_t x9;
-  ;; amount_t x10;
+  (let ((x1  (amount "$123.45"))
+	(x2  (amount "-$123.45"))
+	(x3  (amount "$-123.45"))
+	(x4  (amount "DM 123.45"))
+	(x5  (amount "-DM 123.45"))
+	(x6  (amount "DM -123.45"))
+	(x7  (amount "123.45 euro"))
+	(x8  (amount "-123.45 euro"))
+	#-ecl (x9  (amount "123.45€"))
+	#-ecl (x10 (amount "-123.45€")))
 
-  ;; x1  = "$123.45";
-  ;; x2  = "-$123.45";
-  ;; x3  = "$-123.45";
-  ;; x4  = "DM 123.45";
-  ;; x5  = "-DM 123.45";
-  ;; x6  = "DM -123.45";
-  ;; x7  = "123.45 euro";
-  ;; x8  = "-123.45 euro";
-  ;; x9  = "123.45€";
-  ;; x10 = "-123.45€";
+    (assert-true (value/= x1 x2))
+    (assert-condition 'amount-error (value/= x1 x4))
+    (assert-condition 'amount-error (value/= x1 x7))
+    #-ecl (assert-condition 'amount-error (value/= x1 x9))
+    (assert-true (value= x2 x3))
+    (assert-true (value/= x4 x5))
+    (assert-true (value= x5 x6))
+    (assert-true (value= x7 (negate x8)))
+    #-ecl (assert-true (value= x9 (negate x10)))
 
-  ;; assert-true(x0.is_null());
-  ;; assert-condition(x0.is_zero(), amount_error);
-  ;; assert-condition(x0.is_realzero(), amount_error);
-  ;; assert-condition(assert(x0.sign() == 0), amount_error);
-  ;; assert-condition(assert(x0.compare(x1) < 0), amount_error);
-  ;; assert-condition(assert(x0.compare(x2) > 0), amount_error);
-  ;; assert-condition(assert(x0.compare(x0) == 0), amount_error);
-
-  ;; assert-true(x1 != x2);
-  ;; assert-true(x1 != x4);
-  ;; assert-true(x1 != x7);
-  ;; assert-true(x1 != x9);
-  ;; assert-true(x2 == x3);
-  ;; assert-true(x4 != x5);
-  ;; assert-true(x5 == x6);
-  ;; assert-true(x7 == - x8);
-  ;; assert-true(x9 == - x10);
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    (assert-valid x5)
+    (assert-valid x6)
+    (assert-valid x7)
+    (assert-valid x8)
+    #-ecl (assert-valid x9)
+    #-ecl (assert-valid x10)))
 
 (define-test comparisons ()
-  ;; amount_t x0;
-  ;; amount_t x1(-123L);
-  ;; amount_t x2(123L);
-  ;; amount_t x3(-123.45);
-  ;; amount_t x4(123.45);
-  ;; amount_t x5("-123.45");
-  ;; amount_t x6("123.45");
+  (let ((x1 -123)
+	(x2 123)
+	(x3 (amount "-123.45"))
+	(x4 (amount "123.45"))
+	(x5 (amount "-123.45"))
+	(x6 (amount "123.45")))
 
-  ;; assert-condition(x0 > x1, amount_error);
-  ;; assert-condition(x0 < x2, amount_error);
-  ;; assert-condition(x0 > x3, amount_error);
-  ;; assert-condition(x0 < x4, amount_error);
-  ;; assert-condition(x0 > x5, amount_error);
-  ;; assert-condition(x0 < x6, amount_error);
+    (assert-true (value> x1 x3))
+    (assert-true (value<= x3 x5))
+    (assert-true (value>= x3 x5))
+    (assert-true (value< x3 x1))
+    (assert-true (value< x3 x4))
 
-  ;; assert-true(x1 > x3);
-  ;; assert-true(x3 <= x5);
-  ;; assert-true(x3 >= x5);
-  ;; assert-true(x3 < x1);
-  ;; assert-true(x3 < x4);
+    (assert-true (value< x1 100))
+    (assert-true (value> 100 x1))
+    (assert-true (value< x1 100))
+    (assert-true (value> 100 x1))
+    (assert-true (value< x1 (amount "100.0")))
+    (assert-true (value> (amount "100.0") x1))
 
-  ;; assert-true(x1 < 100L);
-  ;; assert-true(100L > x1);
-  ;; assert-true(x1 < 100UL);
-  ;; assert-true(100UL > x1);
-  ;; assert-true(x1 < 100.0);
-  ;; assert-true(100.0 > x1);
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    (assert-valid x5)
+    (assert-valid x6)))
 
 (define-test commodity-comparisons ()
-  ;; amount_t x1("$-123");
-  ;; amount_t x2("$123.00");
-  ;; amount_t x3(internalAmount("$-123.4544"));
-  ;; amount_t x4(internalAmount("$123.4544"));
-  ;; amount_t x5("$-123.45");
-  ;; amount_t x6("$123.45");
-  ;; amount_t x7("DM 123.45");
+  (let ((x1 (amount "$-123"))
+	(x2 (amount "$123.00"))
+	(x3 (exact-amount "$-123.4544"))
+	(x4 (exact-amount "$123.4544"))
+	(x5 (amount "$-123.45"))
+	(x6 (amount "$123.45"))
+	(x7 (amount "DM 123.45")))
 
-  ;; assert-true(x1 > x3);
-  ;; assert-true(x3 <= x5);
-  ;; assert-true(x3 < x5);
-  ;; assert-true(x3 <= x5);
-  ;; assert-false(x3 == x5);
-  ;; assert-true(x3 < x1);
-  ;; assert-true(x3 < x4);
-  ;; assert-false(x6 == x7);
-  ;; assert-condition(x6 < x7, amount_error);
+    (assert-true (value> x1 x3))
+    (assert-true (value<= x3 x5))
+    (assert-true (value< x3 x5))
+    (assert-true (value<= x3 x5))
+    (assert-false (value= x3 x5))
+    (assert-true (value< x3 x1))
+    (assert-true (value< x3 x4))
+    (assert-condition 'amount-error (value= x6 x7))
+    (assert-condition 'amount-error (value< x6 x7))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    (assert-valid x5)
+    (assert-valid x6)))
 
 (define-test integer-addition ()
-  ;; amount_t x0;
-  ;; amount_t x1(123L);
-  ;; amount_t y1(456L);
+  (let ((x1 (amount 123))
+	(y1 (amount 456)))
 
-  ;; assert-value-equal(amount_t(579L), x1 + y1);
-  ;; assert-value-equal(amount_t(579L), x1 + 456L);
-  ;; assert-value-equal(amount_t(579L), 456L + x1);
+    (assert-value-equal 579 (add x1 y1))
+    (assert-value-equal 579 (add x1 456))
+    (assert-value-equal 579 (add 456 x1))
 
-  ;; x1 += amount_t(456L);
-  ;; assert-value-equal(amount_t(579L), x1);
-  ;; x1 += 456L;
-  ;; assert-value-equal(amount_t(1035L), x1);
+    (add* x1 456)
+    (assert-value-equal 579 x1)
+    (add* x1 456)
+    (assert-value-equal 1035 x1)
 
-  ;; amount_t x4("123456789123456789123456789");
+    (let ((x4 (amount "123456789123456789123456789")))
 
-  ;; assert-value-equal(amount_t("246913578246913578246913578"), x4 + x4);
+      (assert-value-equal (amount "246913578246913578246913578")
+			  (add x4 x4))
 
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x4);
-  )
+      (assert-valid x1)
+      (assert-valid y1)
+      (assert-valid x4))))
 
 (define-test fractional-addition ()
-  ;; amount_t x1(123.123);
-  ;; amount_t y1(456.456);
+  (let ((x1 (amount "123.123"))
+	(y1 (amount "456.456")))
 
-  ;; assert-value-equal(amount_t(579.579), x1 + y1);
-  ;; assert-value-equal(amount_t(579.579), x1 + 456.456);
-  ;; assert-value-equal(amount_t(579.579), 456.456 + x1);
+    (assert-value-equal (amount "579.579") (add x1 y1))
+    (assert-value-equal (amount "579.579") (add x1 (amount "456.456")))
+    (assert-value-equal (amount "579.579") (add (amount "456.456") x1))
 
-  ;; x1 += amount_t(456.456);
-  ;; assert-value-equal(amount_t(579.579), x1);
-  ;; x1 += 456.456;
-  ;; assert-value-equal(amount_t(1036.035), x1);
-  ;; x1 += 456L;
-  ;; assert-value-equal(amount_t(1492.035), x1);
+    (add* x1 (amount "456.456"))
+    (assert-value-equal (amount "579.579") x1)
+    (add* x1 (amount "456.456"))
+    (assert-value-equal (amount "1036.035") x1)
+    (add* x1 456)
+    (assert-value-equal (amount "1492.035") x1)
 
-  ;; amount_t x2("123456789123456789.123456789123456789");
-
-  ;; assert-value-equal(amount_t("246913578246913578.246913578246913578"), x2 + x2);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x2);
-  )
+    (let ((x2 (amount "123456789123456789.123456789123456789")))
+      (assert-value-equal (amount "246913578246913578.246913578246913578")
+			  (add x2 x2))
+      (assert-valid x1)
+      (assert-valid y1)
+      (assert-valid x2))))
 
 (define-test commodity-addition ()
-  ;; amount_t x0;
-  ;; amount_t x1("$123.45");
-  ;; amount_t x2(internalAmount("$123.456789"));
-  ;; amount_t x3("DM 123.45");
-  ;; amount_t x4("123.45 euro");
-  ;; amount_t x5("123.45€");
-  ;; amount_t x6("123.45");
+  (let ((x1 (amount "$123.45"))
+	(x2 (exact-amount "$123.456789"))
+	(x3 (amount "DM 123.45"))
+	(x4 (amount "123.45 euro"))
+	#-ecl (x5 (amount "123.45€"))
+	(x6 (amount "123.45")))
 
-  ;; assert-value-equal(amount_t("$246.90"), x1 + x1);
-  ;; assert-value-not-equal(amount_t("$246.91"), x1 + x2);
-  ;; assert-value-equal(internalAmount("$246.906789"), x1 + x2);
+    (assert-value-equal (amount "$246.90") (add x1 x1))
+    (assert-value-not-equal (amount "$246.91") (add x1 x2))
+    (assert-value-equal (exact-amount "$246.906789") (add x1 x2))
 
-  ;; // Converting to string drops internal precision
-  ;; assert-value-equal(string("$246.90"), (x1 + x1).to_string());
-  ;; assert-value-equal(string("$246.91"), (x1 + x2).to_string());
+    ;; Converting to string drops internal precision
+    (assert-equal "$246.90" (format-value (add x1 x1)))
+    (assert-equal "$246.91" (format-value (add x1 x2)))
 
-  ;; assert-condition(x1 + x0, amount_error);
-  ;; assert-condition(x0 + x1, amount_error);
-  ;; assert-condition(x0 + x0, amount_error);
-  ;; assert-condition(x1 + x3, amount_error);
-  ;; assert-condition(x1 + x4, amount_error);
-  ;; assert-condition(x1 + x5, amount_error);
-  ;; assert-condition(x1 + x6, amount_error);
-  ;; assert-condition(x1 + 123.45, amount_error);
-  ;; assert-condition(x1 + 123L, amount_error);
+    (assert-value-equal (amount "DM 246.90") (add x3 x3))
+    (assert-value-equal (amount "246.90 euro") (add x4 x4))
+    #-ecl (assert-value-equal (amount "246.90€") (add x5 x5))
 
-  ;; assert-value-equal(amount_t("DM 246.90"), x3 + x3);
-  ;; assert-value-equal(amount_t("246.90 euro"), x4 + x4);
-  ;; assert-value-equal(amount_t("246.90€"), x5 + x5);
+    (assert-equal "DM 246.90" (format-value (add x3 x3)))
+    (assert-equal "246.90 euro" (format-value (add x4 x4)))
+    #-ecl (assert-equal "246.90€" (format-value (add x5 x5)))
 
-  ;; assert-value-equal(string("DM 246.90"), (x3 + x3).to_string());
-  ;; assert-value-equal(string("246.90 euro"), (x4 + x4).to_string());
-  ;; assert-value-equal(string("246.90€"), (x5 + x5).to_string());
+    (add* x1 (amount "$456.45"))
+    (assert-value-equal (amount "$579.90") x1)
+    (add* x1 (amount "$456.45"))
+    (assert-value-equal (amount "$1036.35") x1)
+    (add* x1 (amount "$456"))
+    (assert-value-equal (amount "$1492.35") x1)
 
-  ;; x1 += amount_t("$456.45");
-  ;; assert-value-equal(amount_t("$579.90"), x1);
-  ;; x1 += amount_t("$456.45");
-  ;; assert-value-equal(amount_t("$1036.35"), x1);
-  ;; x1 += amount_t("$456");
-  ;; assert-value-equal(amount_t("$1492.35"), x1);
-
-  ;; amount_t x7(internalAmount("$123456789123456789.123456789123456789"));
-
-  ;; assert-value-equal(internalAmount("$246913578246913578.246913578246913578"), x7 + x7);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  )
+    (let ((x7 (exact-amount "$123456789123456789.123456789123456789")))
+      (assert-value-equal (exact-amount "$246913578246913578.246913578246913578")
+			  (add x7 x7))
+      (assert-valid x1)
+      (assert-valid x2)
+      (assert-valid x3)
+      (assert-valid x4)
+      #-ecl (assert-valid x5)
+      (assert-valid x6)
+      (assert-valid x7))))
 
 (define-test integer-subtraction ()
-  ;; amount_t x1(123L);
-  ;; amount_t y1(456L);
+  (let ((x1 (amount 123))
+	(y1 (amount 456)))
 
-  ;; assert-value-equal(amount_t(333L), y1 - x1);
-  ;; assert-value-equal(amount_t(-333L), x1 - y1);
-  ;; assert-value-equal(amount_t(23L), x1 - 100L);
-  ;; assert-value-equal(amount_t(-23L), 100L - x1);
+    (assert-value-equal (amount 333) (subtract y1 x1))
+    (assert-value-equal (amount -333) (subtract x1 y1))
+    (assert-value-equal (amount 23) (subtract x1 100))
+    (assert-value-equal (amount -23) (subtract 100 x1))
 
-  ;; x1 -= amount_t(456L);
-  ;; assert-value-equal(amount_t(-333L), x1);
-  ;; x1 -= 456L;
-  ;; assert-value-equal(amount_t(-789L), x1);
+    (subtract* x1 (amount 456))
+    (assert-value-equal (amount -333) x1)
+    (subtract* x1 456)
+    (assert-value-equal (amount -789) x1)
 
-  ;; amount_t x4("123456789123456789123456789");
-  ;; amount_t y4("8238725986235986");
-
-  ;; assert-value-equal(amount_t("123456789115218063137220803"), x4 - y4);
-  ;; assert-value-equal(amount_t("-123456789115218063137220803"), y4 - x4);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x4);
-  ;; assert-valid(y4);
-  )
+    (let ((x4 (amount "123456789123456789123456789"))
+	  (y4 (amount "8238725986235986")))
+      (assert-value-equal (amount "123456789115218063137220803")
+			  (subtract x4 y4))
+      (assert-value-equal (amount "-123456789115218063137220803")
+			  (subtract y4 x4))
+      (assert-valid x1)
+      (assert-valid y1)
+      (assert-valid x4)
+      (assert-valid y4))))
 
 (define-test fractional-subtraction ()
-  ;; amount_t x1(123.123);
-  ;; amount_t y1(456.456);
+  (let ((x1 (amount "123.123"))
+	(y1 (amount "456.456")))
 
-  ;; assert-value-equal(amount_t(-333.333), x1 - y1);
-  ;; assert-value-equal(amount_t(333.333), y1 - x1);
+    (assert-value-equal (amount "-333.333") (subtract x1 y1))
+    (assert-value-equal (amount "333.333") (subtract y1 x1))
 
-  ;; x1 -= amount_t(456.456);
-  ;; assert-value-equal(amount_t(-333.333), x1);
-  ;; x1 -= 456.456;
-  ;; assert-value-equal(amount_t(-789.789), x1);
-  ;; x1 -= 456L;
-  ;; assert-value-equal(amount_t(-1245.789), x1);
+    (subtract* x1 (amount "456.456"))
+    (assert-value-equal (amount "-333.333") x1)
+    (subtract* x1 (amount "456.456"))
+    (assert-value-equal (amount "-789.789") x1)
+    (subtract* x1 456)
+    (assert-value-equal (amount "-1245.789") x1)
 
-  ;; amount_t x2("123456789123456789.123456789123456789");
-  ;; amount_t y2("9872345982459.248974239578");
-
-  ;; assert-value-equal(amount_t("123446916777474329.874482549545456789"), x2 - y2);
-  ;; assert-value-equal(amount_t("-123446916777474329.874482549545456789"), y2 - x2);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x2);
-  ;; assert-valid(y2);
-  )
+    (let ((x2 (amount "123456789123456789.123456789123456789"))
+	  (y2 (amount "9872345982459.248974239578")))
+      (assert-value-equal (amount "123446916777474329.874482549545456789")
+			  (subtract x2 y2))
+      (assert-value-equal (amount "-123446916777474329.874482549545456789")
+			  (subtract y2 x2))
+      (assert-valid x1)
+      (assert-valid y1)
+      (assert-valid x2)
+      (assert-valid y2))))
 
 (define-test commodity-subtraction ()
-  ;; amount_t x0;
-  ;; amount_t x1("$123.45");
-  ;; amount_t x2(internalAmount("$123.456789"));
-  ;; amount_t x3("DM 123.45");
-  ;; amount_t x4("123.45 euro");
-  ;; amount_t x5("123.45€");
-  ;; amount_t x6("123.45");
+  (let ((x1 (amount "$123.45"))
+	(x2 (exact-amount "$123.456789"))
+	(x3 (amount "DM 123.45"))
+	(x4 (amount "123.45 euro"))
+	#-ecl (x5 (amount "123.45€"))
+	(x6 (amount "123.45")))
 
-  ;; assert-value-not-equal(amount_t(), x1 - x1);
-  ;; assert-value-equal(amount_t("$0"), x1 - x1);
-  ;; assert-value-equal(amount_t("$23.45"), x1 - amount_t("$100.00"));
-  ;; assert-value-equal(amount_t("$-23.45"), amount_t("$100.00") - x1);
-  ;; assert-value-not-equal(amount_t("$-0.01"), x1 - x2);
-  ;; assert-value-equal(internalAmount("$-0.006789"), x1 - x2);
+    (assert-true (value-zerop (subtract x1 x1)))
+    (assert-true (value-zerop* (subtract x1 x1)))
+    (assert-value-equal (amount "$0") (subtract x1 x1))
+    (assert-value-equal (amount "$23.45") (subtract x1 (amount "$100.00")))
+    (assert-value-equal (amount "$-23.45") (subtract (amount "$100.00") x1))
+    (assert-value-not-equal (amount "$-0.01") (subtract x1 x2))
+    (assert-value-equal (exact-amount "$-0.006789") (subtract x1 x2))
 
-  ;; // Converting to string drops internal precision.  If an amount is
-  ;; // zero, it drops the commodity as well.
-  ;; assert-value-equal(string("$0.00"), (x1 - x1).to_string());
-  ;; assert-value-equal(string("$-0.01"), (x1 - x2).to_string());
+    ;; Converting to string drops internal precision.  If an amount is
+    ;; zero it drops the commodity as well.
+    (assert-equal "$0.00" (format-value (subtract x1 x1)))
+    (assert-equal "$-0.01" (format-value (subtract x1 x2)))
 
-  ;; assert-condition(x1 - x0, amount_error);
-  ;; assert-condition(x0 - x1, amount_error);
-  ;; assert-condition(x0 - x0, amount_error);
-  ;; assert-condition(x1 - x3, amount_error);
-  ;; assert-condition(x1 - x4, amount_error);
-  ;; assert-condition(x1 - x5, amount_error);
-  ;; assert-condition(x1 - x6, amount_error);
-  ;; assert-condition(x1 - 123.45, amount_error);
-  ;; assert-condition(x1 - 123L, amount_error);
+    (assert-value-equal (amount "DM 0.00") (subtract x3 x3))
+    (assert-value-equal (amount "DM 23.45") (subtract x3 (amount "DM 100.00")))
+    (assert-value-equal (amount "DM -23.45") (subtract (amount "DM 100.00") x3))
+    (assert-value-equal (amount "0.00 euro") (subtract x4 x4))
+    (assert-value-equal (amount "23.45 euro") (subtract x4 (amount "100.00 euro")))
+    (assert-value-equal (amount "-23.45 euro") (subtract (amount "100.00 euro") x4))
+    #-ecl (assert-value-equal (amount "0.00€") (subtract x5 x5))
+    #-ecl (assert-value-equal (amount "23.45€") (subtract x5 (amount "100.00€")))
+    #-ecl (assert-value-equal (amount "-23.45€") (subtract (amount "100.00€") x5))
 
-  ;; assert-value-equal(amount_t("DM 0.00"), x3 - x3);
-  ;; assert-value-equal(amount_t("DM 23.45"), x3 - amount_t("DM 100.00"));
-  ;; assert-value-equal(amount_t("DM -23.45"), amount_t("DM 100.00") - x3);
-  ;; assert-value-equal(amount_t("0.00 euro"), x4 - x4);
-  ;; assert-value-equal(amount_t("23.45 euro"), x4 - amount_t("100.00 euro"));
-  ;; assert-value-equal(amount_t("-23.45 euro"), amount_t("100.00 euro") - x4);
-  ;; assert-value-equal(amount_t("0.00€"), x5 - x5);
-  ;; assert-value-equal(amount_t("23.45€"), x5 - amount_t("100.00€"));
-  ;; assert-value-equal(amount_t("-23.45€"), amount_t("100.00€") - x5);
+    (assert-equal "DM 0.00" (format-value (subtract x3 x3)))
+    (assert-equal "DM 23.45" (format-value (subtract x3 (amount "DM 100.00"))))
+    (assert-equal "DM -23.45" (format-value (subtract (amount "DM 100.00") x3)))
+    (assert-equal "0.00 euro" (format-value (subtract x4 x4)))
+    (assert-equal "23.45 euro" (format-value (subtract x4 (amount "100.00 euro"))))
+    (assert-equal "-23.45 euro" (format-value (subtract (amount "100.00 euro") x4)))
+    #-ecl (assert-equal "0.00€" (format-value (subtract x5 x5)))
+    #-ecl (assert-equal "23.45€" (format-value (subtract x5 (amount "100.00€"))))
+    #-ecl (assert-equal "-23.45€" (format-value (subtract (amount "100.00€") x5)))
 
-  ;; assert-value-equal(string("DM 0.00"), (x3 - x3).to_string());
-  ;; assert-value-equal(string("DM 23.45"), (x3 - amount_t("DM 100.00")).to_string());
-  ;; assert-value-equal(string("DM -23.45"), (amount_t("DM 100.00") - x3).to_string());
-  ;; assert-value-equal(string("0.00 euro"), (x4 - x4).to_string());
-  ;; assert-value-equal(string("23.45 euro"), (x4 - amount_t("100.00 euro")).to_string());
-  ;; assert-value-equal(string("-23.45 euro"), (amount_t("100.00 euro") - x4).to_string());
-  ;; assert-value-equal(string("0.00€"), (x5 - x5).to_string());
-  ;; assert-value-equal(string("23.45€"), (x5 - amount_t("100.00€")).to_string());
-  ;; assert-value-equal(string("-23.45€"), (amount_t("100.00€") - x5).to_string());
+    (subtract* x1 (amount "$456.45"))
+    (assert-value-equal (amount "$-333.00") x1)
+    (subtract* x1 (amount "$456.45"))
+    (assert-value-equal (amount "$-789.45") x1)
+    (subtract* x1 (amount "$456"))
+    (assert-value-equal (amount "$-1245.45") x1)
 
-  ;; x1 -= amount_t("$456.45");
-  ;; assert-value-equal(amount_t("$-333.00"), x1);
-  ;; x1 -= amount_t("$456.45");
-  ;; assert-value-equal(amount_t("$-789.45"), x1);
-  ;; x1 -= amount_t("$456");
-  ;; assert-value-equal(amount_t("$-1245.45"), x1);
+    (let ((x7 (exact-amount "$123456789123456789.123456789123456789"))
+	  (x8 (exact-amount "$2354974984698.98459845984598")))
 
-  ;; amount_t x7(internalAmount("$123456789123456789.123456789123456789"));
-  ;; amount_t x8(internalAmount("$2354974984698.98459845984598"));
+      (assert-value-equal (exact-amount "$123454434148472090.138858329277476789")
+			  (subtract x7 x8))
+      (assert-equal "$123,454,434,148,472,090.138858329277476789"
+		    (format-value (subtract x7 x8)))
+      (assert-equal "$123,454,434,148,472,090.14"
+		    (format-value (multiply (amount "$1.00") (subtract x7 x8))))
+      (assert-value-equal (exact-amount "$-123454434148472090.138858329277476789")
+			  (subtract x8 x7))
+      (assert-equal "$-123,454,434,148,472,090.138858329277476789"
+		    (format-value (subtract x8 x7)))
+      (assert-equal "$-123,454,434,148,472,090.14"
+		    (format-value (multiply (amount "$1.00") (subtract x8 x7)))))
 
-  ;; assert-value-equal(internalAmount("$123454434148472090.138858329277476789"), x7 - x8);
-  ;; assert-value-equal(string("$123454434148472090.138858329277476789"), (x7 - x8).to_string());
-  ;; assert-value-equal(string("$123454434148472090.14"), (amount_t("$1.00") * (x7 - x8)).to_string()) ;
-  ;; assert-value-equal(internalAmount("$-123454434148472090.138858329277476789"), x8 - x7);
-  ;; assert-value-equal(string("$-123454434148472090.138858329277476789"), (x8 - x7).to_string());
-  ;; assert-value-equal(string("$-123454434148472090.14"), (amount_t("$1.00") * (x8 - x7)).to_string()) ;
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    #-ecl (assert-valid x5)
+    (assert-valid x6)))
 
 (define-test integer-multiplication ()
-  ;; amount_t x1(123L);
-  ;; amount_t y1(456L);
+  (let ((x1 (amount 123))
+	(y1 (amount 456)))
 
-  ;; assert-value-equal(amount_t(0L), x1 * 0L);
-  ;; assert-value-equal(amount_t(0L), amount_t(0L) * x1);
-  ;; assert-value-equal(amount_t(0L), 0L * x1);
-  ;; assert-value-equal(x1, x1 * 1L);
-  ;; assert-value-equal(x1, amount_t(1L) * x1);
-  ;; assert-value-equal(x1, 1L * x1);
-  ;; assert-value-equal(- x1, x1 * -1L);
-  ;; assert-value-equal(- x1, amount_t(-1L) * x1);
-  ;; assert-value-equal(- x1, -1L * x1);
-  ;; assert-value-equal(amount_t(56088L), x1 * y1);
-  ;; assert-value-equal(amount_t(56088L), y1 * x1);
-  ;; assert-value-equal(amount_t(56088L), x1 * 456L);
-  ;; assert-value-equal(amount_t(56088L), amount_t(456L) * x1);
-  ;; assert-value-equal(amount_t(56088L), 456L * x1);
+    (assert-value-equal (amount 0) (multiply x1 0))
+    (assert-value-equal (amount 0) (multiply 0 x1))
+    (assert-value-equal x1 (multiply x1 1))
+    (assert-value-equal x1 (multiply (amount 1) x1))
+    (assert-value-equal x1 (multiply 1 x1))
+    (assert-value-equal (negate x1) (multiply x1 -1))
+    (assert-value-equal (negate x1) (multiply (amount -1) x1))
+    (assert-value-equal (negate x1) (negate (multiply 1 x1)))
+    (assert-value-equal (amount 56088) (multiply x1 y1))
+    (assert-value-equal (amount 56088) (multiply y1 x1))
+    (assert-value-equal (amount 56088) (multiply x1 456))
+    (assert-value-equal (amount 56088) (multiply (amount 456) x1))
+    (assert-value-equal (amount 56088) (multiply 456 x1))
 
-  ;; x1 *= amount_t(123L);
-  ;; assert-value-equal(amount_t(15129L), x1);
-  ;; x1 *= 123L;
-  ;; assert-value-equal(amount_t(1860867L), x1);
+    (multiply* x1 (amount 123))
+    (assert-value-equal (amount 15129) x1)
+    (multiply* x1 123)
+    (assert-value-equal (amount 1860867) x1)
 
-  ;; amount_t x4("123456789123456789123456789");
+    (let ((x4 (amount "123456789123456789123456789")))
+      (assert-value-equal (amount "15241578780673678546105778281054720515622620750190521")
+			  (multiply x4 x4)))
 
-  ;; assert-value-equal(amount_t("15241578780673678546105778281054720515622620750190521"), x4 * x4);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x4);
-  )
+    (assert-valid x1)
+    (assert-valid y1)))
 
 (define-test fractional-multiplication ()
-  ;; amount_t x1(123.123);
-  ;; amount_t y1(456.456);
+  (let ((x1 (amount "123.123"))
+	(y1 (amount "456.456")))
 
-  ;; assert-value-equal(amount_t(0L), x1 * 0L);
-  ;; assert-value-equal(amount_t(0L), amount_t(0L) * x1);
-  ;; assert-value-equal(amount_t(0L), 0L * x1);
-  ;; assert-value-equal(x1, x1 * 1L);
-  ;; assert-value-equal(x1, amount_t(1L) * x1);
-  ;; assert-value-equal(x1, 1L * x1);
-  ;; assert-value-equal(- x1, x1 * -1L);
-  ;; assert-value-equal(- x1, amount_t(-1L) * x1);
-  ;; assert-value-equal(- x1, -1L * x1);
-  ;; assert-value-equal(amount_t("56200.232088"), x1 * y1);
-  ;; assert-value-equal(amount_t("56200.232088"), y1 * x1);
-  ;; assert-value-equal(amount_t("56200.232088"), x1 * 456.456);
-  ;; assert-value-equal(amount_t("56200.232088"), amount_t(456.456) * x1);
-  ;; assert-value-equal(amount_t("56200.232088"), 456.456 * x1);
+    (assert-value-equal (amount 0) (multiply x1 0))
+    (assert-value-equal (amount 0) (multiply (amount 0) x1))
+    (assert-value-equal (amount 0) (multiply 0 x1))
+    (assert-value-equal x1 (multiply x1 1))
+    (assert-value-equal x1 (multiply (amount 1) x1))
+    (assert-value-equal x1 (multiply 1 x1))
+    (assert-value-equal (negate x1) (multiply x1 -1))
+    (assert-value-equal (negate x1) (multiply (amount -1) x1))
+    (assert-value-equal (negate x1) (negate (multiply 1 x1)))
+    (assert-value-equal (amount "56200.232088") (multiply x1 y1))
+    (assert-value-equal (amount "56200.232088") (multiply y1 x1))
+    (assert-value-equal (amount "56200.232088") (multiply x1 (amount "456.456")))
+    (assert-value-equal (amount "56200.232088") (multiply (amount "456.456") x1))
 
-  ;; x1 *= amount_t(123.123);
-  ;; assert-value-equal(amount_t("15159.273129"), x1);
-  ;; x1 *= 123.123;
-  ;; assert-value-equal(amount_t("1866455.185461867"), x1);
-  ;; x1 *= 123L;
-  ;; assert-value-equal(amount_t("229573987.811809641"), x1);
+    (multiply* x1 (amount "123.123"))
+    (assert-value-equal (amount "15159.273129") x1)
+    (multiply* x1 (amount "123.123"))
+    (assert-value-equal (amount "1866455.185461867") x1)
+    (multiply* x1 123)
+    (assert-value-equal (amount "229573987.811809641") x1)
 
-  ;; amount_t x2("123456789123456789.123456789123456789");
+    (let ((x2 (amount "123456789123456789.123456789123456789")))
+      (assert-value-equal
+       (amount "15241578780673678546105778311537878.046486820281054720515622620750190521")
+       (multiply x2 x2))) 
 
-  ;; assert-value-equal(amount_t("15241578780673678546105778311537878.046486820281054720515622620750190521"), x2 * x2);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x2);
-  )
+    (assert-valid x1)
+    (assert-valid y1)))
 
 (define-test commodity-multiplication ()
-  ;; amount_t x0;
-  ;; amount_t x1("$123.12");
-  ;; amount_t y1("$456.45");
-  ;; amount_t x2(internalAmount("$123.456789"));
-  ;; amount_t x3("DM 123.45");
-  ;; amount_t x4("123.45 euro");
-  ;; amount_t x5("123.45€");
+  (let ((x1 (amount "$123.12"))
+	(y1 (amount "$456.45"))
+	(x2 (exact-amount "$123.456789"))
+	(x3 (amount "DM 123.45"))
+	(x4 (amount "123.45 euro"))
+	#-ecl (x5 (amount "123.45€")))
 
-  ;; assert-value-equal(amount_t("$0.00"), x1 * 0L);
-  ;; assert-value-equal(amount_t("$0.00"), 0L * x1);
-  ;; assert-value-equal(x1, x1 * 1L);
-  ;; assert-value-equal(x1, 1L * x1);
-  ;; assert-value-equal(- x1, x1 * -1L);
-  ;; assert-value-equal(- x1, -1L * x1);
-  ;; assert-value-equal(internalAmount("$56198.124"), x1 * y1);
-  ;; assert-value-equal(string("$56198.12"), (x1 * y1).to_string());
-  ;; assert-value-equal(internalAmount("$56198.124"), y1 * x1);
-  ;; assert-value-equal(string("$56198.12"), (y1 * x1).to_string());
+    (assert-value-equal (amount "$0.00") (multiply x1 0))
+    (assert-value-equal (amount "$0.00") (multiply 0 x1))
+    (assert-value-equal x1 (multiply x1 1))
+    (assert-value-equal x1 (multiply 1 x1))
+    (assert-value-equal (negate x1) (multiply x1 -1))
+    (assert-value-equal (negate x1) (negate (multiply 1 x1)))
+    (assert-value-equal (exact-amount "$56198.124") (multiply x1 y1))
+    (assert-equal "$56,198.12" (format-value (multiply x1 y1)))
+    (assert-value-equal (exact-amount "$56198.124") (multiply y1 x1))
+    (assert-equal "$56,198.12" (format-value (multiply y1 x1)))
 
-  ;; // Internal amounts retain their precision, even when being
-  ;; // converted to strings
-  ;; assert-value-equal(internalAmount("$15199.99986168"), x1 * x2);
-  ;; assert-value-equal(internalAmount("$15199.99986168"), x2 * x1);
-  ;; assert-value-equal(string("$15200.00"), (x1 * x2).to_string());
-  ;; assert-value-equal(string("$15199.99986168"), (x2 * x1).to_string());
+    ;; Internal amounts retain their precision even when being
+    ;; converted to strings
+    (assert-value-equal (exact-amount "$15199.99986168") (multiply x1 x2))
+    (assert-value-equal (exact-amount "$15199.99986168") (multiply x2 x1))
+    (assert-equal "$15,200.00" (format-value (multiply x1 x2)))
+    (assert-equal "$15,199.99986168" (format-value (multiply x2 x1)))
 
-  ;; assert-condition(x1 * x0, amount_error);
-  ;; assert-condition(x0 * x1, amount_error);
-  ;; assert-condition(x0 * x0, amount_error);
-  ;; assert-condition(x1 * x3, amount_error);
-  ;; assert-condition(x1 * x4, amount_error);
-  ;; assert-condition(x1 * x5, amount_error);
+    (multiply* x1 (amount "123.12"))
+    (assert-value-equal (exact-amount "$15158.5344") x1)
+    (assert-equal "$15,158.53" (format-value x1))
+    (multiply* x1 (amount "123.12"))
+    (assert-value-equal (exact-amount "$1866318.755328") x1)
+    (assert-equal "$1,866,318.76" (format-value x1))
+    (multiply* x1 123)
+    (assert-value-equal (exact-amount "$229557206.905344") x1)
+    (assert-equal "$229,557,206.91" (format-value x1))
 
-  ;; x1 *= amount_t("123.12");
-  ;; assert-value-equal(internalAmount("$15158.5344"), x1);
-  ;; assert-value-equal(string("$15158.53"), x1.to_string());
-  ;; x1 *= 123.12;
-  ;; assert-value-equal(internalAmount("$1866318.755328"), x1);
-  ;; assert-value-equal(string("$1866318.76"), x1.to_string());
-  ;; x1 *= 123L;
-  ;; assert-value-equal(internalAmount("$229557206.905344"), x1);
-  ;; assert-value-equal(string("$229557206.91"), x1.to_string());
+    (let ((x7 (exact-amount "$123456789123456789.123456789123456789")))
+      (assert-value-equal
+       (exact-amount "$15241578780673678546105778311537878.046486820281054720515622620750190521")
+       (multiply x7 x7))) 
 
-  ;; amount_t x7(internalAmount("$123456789123456789.123456789123456789"));
-
-  ;; assert-value-equal(internalAmount("$15241578780673678546105778311537878.046486820281054720515622620750190521"), x7 * x7);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x7);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    #-ecl (assert-valid x5)))
 
 (define-test integer-division ()
-  ;; amount_t x1(123L);
-  ;; amount_t y1(456L);
+  (let ((x1 (amount 123))
+	(y1 (amount 456)))
 
-  ;; assert-condition(x1 / 0L, amount_error);
-  ;; assert-value-equal(amount_t(0L), amount_t(0L) / x1);
-  ;; assert-value-equal(amount_t(0L), 0L / x1);
-  ;; assert-value-equal(x1, x1 / 1L);
-  ;; assert-value-equal(amount_t("0.008130"), amount_t(1L) / x1);
-  ;; assert-value-equal(amount_t("0.008130"), 1L / x1);
-  ;; assert-value-equal(- x1, x1 / -1L);
-  ;; assert-value-equal(- amount_t("0.008130"), amount_t(-1L) / x1);
-  ;; assert-value-equal(- amount_t("0.008130"), -1L / x1);
-  ;; assert-value-equal(amount_t("0.269737"), x1 / y1);
-  ;; assert-value-equal(amount_t("3.707317"), y1 / x1);
-  ;; assert-value-equal(amount_t("0.269737"), x1 / 456L);
-  ;; assert-value-equal(amount_t("3.707317"), amount_t(456L) / x1);
-  ;; assert-value-equal(amount_t("3.707317"), 456L / x1);
+    (assert-condition 'amount-error (divide x1 0))
+    (assert-value-equal (amount 0) (divide (amount 0) x1))
+    (assert-value-equal (amount 0) (divide 0 x1))
+    (assert-value-equal x1 (divide x1 1))
+    (assert-value-equal (amount "0.008130") (divide (amount 1) x1))
+    (assert-value-equal (amount "0.008130") (divide 1 x1))
+    (assert-value-equal (negate x1) (divide x1 -1))
+    (assert-value-equal (negate (amount "0.008130")) (divide (amount -1) x1))
+    (assert-value-equal (negate (amount "0.008130")) (divide -1 x1))
+    (assert-value-equal (amount "0.269737") (divide x1 y1))
+    (assert-value-equal (amount "3.707317") (divide y1 x1))
+    (assert-value-equal (amount "0.269737") (divide x1 456))
+    (assert-value-equal (amount "3.707317") (divide (amount 456) x1))
+    (assert-value-equal (amount "3.707317") (divide 456 x1))
 
-  ;; x1 /= amount_t(456L);
-  ;; assert-value-equal(amount_t("0.269737"), x1);
-  ;; x1 /= 456L;
-  ;; assert-value-equal(amount_t("0.00059152850877193"), x1);
+    (divide* x1 (amount 456))
+    (assert-value-equal (amount "0.269737") x1)
+    (divide* x1 456)
+    (assert-value-equal (amount "0.00059152850877193") x1)
 
-  ;; amount_t x4("123456789123456789123456789");
-  ;; amount_t y4("56");
+    (let ((x4 (amount "123456789123456789123456789"))
+	  (y4 (amount "56")))
 
-  ;; assert-value-equal(amount_t(1L), x4 / x4);
-  ;; assert-value-equal(amount_t("2204585520061728377204585.517857"), x4 / y4);
+      (assert-value-equal (amount 1) (divide x4 x4))
+      (assert-value-equal (amount "2204585520061728377204585.517857") (divide x4 y4)))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x4);
-  ;; assert-valid(y4);
-  )
+    (assert-valid x1)
+    (assert-valid y1)))
 
 (define-test fractional-division ()
-  ;; amount_t x1(123.123);
-  ;; amount_t y1(456.456);
+  (let ((x1 (amount "123.123"))
+	(y1 (amount "456.456")))
 
-  ;; assert-condition(x1 / 0L, amount_error);
-  ;; assert-value-equal(amount_t("0.008121959"), amount_t(1.0) / x1);
-  ;; assert-value-equal(amount_t("0.008121959"), 1.0 / x1);
-  ;; assert-value-equal(x1, x1 / 1.0);
-  ;; assert-value-equal(amount_t("0.008121959"), amount_t(1.0) / x1);
-  ;; assert-value-equal(amount_t("0.008121959"), 1.0 / x1);
-  ;; assert-value-equal(- x1, x1 / -1.0);
-  ;; assert-value-equal(- amount_t("0.008121959"), amount_t(-1.0) / x1);
-  ;; assert-value-equal(- amount_t("0.008121959"), -1.0 / x1);
-  ;; assert-value-equal(amount_t("0.269736842105263"), x1 / y1);
-  ;; assert-value-equal(amount_t("3.707317073170732"), y1 / x1);
-  ;; assert-value-equal(amount_t("0.269736842105263"), x1 / 456.456);
-  ;; assert-value-equal(amount_t("3.707317073170732"), amount_t(456.456) / x1);
-  ;; assert-value-equal(amount_t("3.707317073170732"), 456.456 / x1);
+    (assert-condition 'amount-error (divide x1 0))
+    (assert-value-equal (amount "0.00812195934") (divide (amount "1.0") x1))
+    (assert-value-equal x1 (divide x1 (amount "1.0")))
+    (assert-value-equal (negate x1) (divide x1 (amount "-1.0")))
+    (assert-value-equal (negate (amount "0.00812195934")) (divide (amount "-1.0") x1))
+    (assert-value-equal (amount "0.269736842105263") (divide x1 y1))
+    (assert-value-equal (amount "3.707317073170732") (divide y1 x1))
+    (assert-value-equal (amount "0.269736842105263") (divide x1 (amount "456.456")))
+    (assert-value-equal (amount "3.707317073170732") (divide (amount "456.456") x1))
 
-  ;; x1 /= amount_t(456.456);
-  ;; assert-value-equal(amount_t("0.269736842105263"), x1);
-  ;; x1 /= 456.456;
-  ;; assert-value-equal(amount_t("0.000590937225286255411255411255411255411"), x1);
-  ;; x1 /= 456L;
-  ;; assert-value-equal(amount_t("0.000001295914967733016252753094858358016252192982456140350877192982456140350877192982"), x1);
+    (divide* x1 (amount "456.456"))
+    (assert-value-equal (amount "0.269736842105263") x1)
+    (divide* x1 (amount "456.456"))
+    (assert-value-equal (amount "0.000590937225286255411255411255411255411") x1)
+    (divide* x1 456)
+    (assert-value-equal (amount "0.000001295914967733016252753094858358016252192982456140350877192982456140350877192982") x1)
 
-  ;; amount_t x4("1234567891234567.89123456789");
-  ;; amount_t y4("56.789");
-
-  ;; assert-value-equal(amount_t(1.0), x4 / x4);
-  ;; assert-value-equal(amount_t("21739560323910.7554497273748437197344556164046"), x4 / y4);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(y1);
-  ;; assert-valid(x4);
-  ;; assert-valid(y4);
-  )
+    (let ((x4 (amount "1234567891234567.89123456789"))
+	  (y4 (amount "56.789")))
+      (assert-value-equal (amount "1.0") (divide x4 x4))
+      (assert-value-equal (amount "21739560323910.7554497273748437197344556164046")
+			  (divide x4 y4)))
+  
+    (assert-valid x1)
+    (assert-valid y1)))
 
 (define-test commodity-division ()
   (let ((x1 (amount "$123.12"))
@@ -1064,621 +789,382 @@
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
 	(x4 (amount "123.45 euro"))
-	;; (x5 (amount "123.45€"))
-	)
+	#-ecl (x5 (amount "123.45€")))
 
     (assert-condition 'amount-error (divide x1 0))
     (assert-true (value-zerop (divide 0 x1)))
-    ;; assert-value-equal(amount_t("$0.00"), 0L / x1);
-    ;; assert-value-equal(x1, x1 / 1L);
-    ;; assert-value-equal(internalAmount("$0.00812216"), 1L / x1);
-    ;; assert-value-equal(- x1, x1 / -1L);
-    ;; assert-value-equal(internalAmount("$-0.00812216"), -1L / x1);
-    ;; assert-value-equal(internalAmount("$0.26973382"), x1 / y1);
-    ;; assert-value-equal(string("$0.27"), (x1 / y1).to_string());
-    ;; assert-value-equal(internalAmount("$3.70735867"), y1 / x1);
-    ;; assert-value-equal(string("$3.71"), (y1 / x1).to_string());
+    (assert-value-equal (amount "$0.00") (divide 0 x1))
+    (assert-value-equal x1 (divide x1 1))
+    (assert-value-equal (exact-amount "$0.00812216") (divide 1 x1))
+    (assert-value-equal (negate x1) (divide x1 -1))
+    (assert-value-equal (exact-amount "$-0.00812216") (divide -1 x1))
+    (assert-value-equal (exact-amount "$0.26973382") (divide x1 y1))
+    (assert-equal "$0.27" (format-value (divide x1 y1)))
+    (assert-value-equal (exact-amount "$3.70735867") (divide y1 x1))
+    (assert-equal "$3.71" (format-value (divide y1 x1)))
 
-    ;; // Internal amounts retain their precision, even when being
-    ;; // converted to strings
-    ;; assert-value-equal(internalAmount("$0.99727201"), x1 / x2);
-    ;; assert-value-equal(internalAmount("$1.00273545321637426901"), x2 / x1);
-    ;; assert-value-equal(string("$1.00"), (x1 / x2).to_string());
-    ;; assert-value-equal(string("$1.00273545321637426901"), (x2 / x1).to_string());
+    ;; Internal amounts retain their precision even when being
+    ;; converted to strings
+    (assert-value-equal (exact-amount "$0.99727201") (divide x1 x2))
+    (assert-value-equal (exact-amount "$1.00273545321637426901") (divide x2 x1))
+    (assert-equal "$1.00" (format-value (divide x1 x2)))
+    (assert-equal "$1.00273545321637426901" (format-value (divide x2 x1)))
 
-    ;; assert-condition(x1 / x0, amount_error);
-    ;; assert-condition(x0 / x1, amount_error);
-    ;; assert-condition(x0 / x0, amount_error);
-    ;; assert-condition(x1 / x3, amount_error);
-    ;; assert-condition(x1 / x4, amount_error);
-    ;; assert-condition(x1 / x5, amount_error);
-
-    ;; x1 /= amount_t("123.12");
-    ;; assert-value-equal(internalAmount("$1.00"), x1);
-    ;; assert-value-equal(string("$1.00"), x1.to_string());
-    ;; x1 /= 123.12;
-    ;; assert-value-equal(internalAmount("$0.00812216"), x1);
-    ;; assert-value-equal(string("$0.01"), x1.to_string());
-    ;; x1 /= 123L;
-    ;; assert-value-equal(internalAmount("$0.00006603"), x1);
-    ;; assert-value-equal(string("$0.00"), x1.to_string());
+    (divide* x1 (amount "123.12"))
+    (assert-value-equal (exact-amount "$1.00") x1)
+    (assert-equal "$1.00" (format-value x1))
+    (divide* x1 (amount "123.12"))
+    (assert-value-equal (exact-amount "$0.00812216") x1)
+    (assert-equal "$0.01" (format-value x1))
+    (divide* x1 123)
+    (assert-value-equal (exact-amount "$0.00006603") x1)
+    (assert-equal "$0.00" (format-value x1))
 
     (let ((x6 (amount* "$237235987235987.98723987235978"))
 	  (x7 (amount* "$123456789123456789.123456789123456789")))
-
       (assert-value-equal (amount* "$1") (divide x7 x7))
+
       (assert-value-equal
-       (amount* "$0.0019216115121765559608381226612019501046413574469262")
+       (amount* "0.0019216115121765559608381226612019501046413574469262")
+       (divide (amount-sans-commodity x6) (amount-sans-commodity x7)))
+      ;; Commoditized values, when not dealing with exact-amount arithmetic,
+      ;; only preserve the commodity's display precision plus
+      ;; *extra-precision*.
+      (assert-value-equal
+       (amount* "$0.00192161")
        (divide x6 x7))
+
       (assert-value-equal
-       (amount* "$520.39654928343335571379527154924040947271699678158689736256")
+       (amount* "520.39654928343335571379527154924040947271699678158689736256")
+       (divide (amount-sans-commodity x7) (amount-sans-commodity x6)))
+      (assert-value-equal
+       (amount* "$520.39654928")
        (divide x7 x6)))
 
-    ;; assert-valid(x1);
-    ;; assert-valid(x2);
-    ;; assert-valid(x3);
-    ;; assert-valid(x4);
-    ;; assert-valid(x5);
-    ;; assert-valid(x6);
-    ;; assert-valid(x7);
-    ))
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    #-ecl (assert-valid x5)))
 
 (define-test negation ()
-  ;; amount_t x0;
-  ;; amount_t x1(-123456L);
-  ;; amount_t x3(-123.456);
-  ;; amount_t x5("-123456");
-  ;; amount_t x6("-123.456");
-  ;; amount_t x7(string("-123456"));
-  ;; amount_t x8(string("-123.456"));
-  ;; amount_t x9(- x3);
+  (let* ((x1 (amount -123456))
+	 (x3 (amount "-123.456"))
+	 (x5 (amount "-123456"))
+	 (x6 (amount "-123.456"))
+	 (x7 (amount "-123456"))
+	 (x8 (amount "-123.456"))
+	 (x9 (negate x3)))
 
-  ;; assert-condition(x0.negate(), amount_error);
-  ;; assert-value-equal(x5, x1);
-  ;; assert-value-equal(x7, x1);
-  ;; assert-value-equal(x6, x3);
-  ;; assert-value-equal(x8, x3);
-  ;; assert-value-equal(- x6, x9);
-  ;; assert-value-equal(x3.negate(), x9);
+    (assert-value-equal x5 x1)
+    (assert-value-equal x7 x1)
+    (assert-value-equal x6 x3)
+    (assert-value-equal x8 x3)
+    (assert-value-equal (negate x6) x9)
+    (assert-value-equal (negate x3) x9)
 
-  ;; amount_t x10(x9.negate());
+    (let ((x10 (negate x9)))
+      (assert-value-equal x3 x10))
 
-  ;; assert-value-equal(x3, x10);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x3);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
+    (assert-valid x1)
+    (assert-valid x3)
+    (assert-valid x5)
+    (assert-valid x6)
+    (assert-valid x7)
+    (assert-valid x8)
+    (assert-valid x9)))
 
 (define-test commodity-negation ()
-  ;; amount_t x1("$123.45");
-  ;; amount_t x2("-$123.45");
-  ;; amount_t x3("$-123.45");
-  ;; amount_t x4("DM 123.45");
-  ;; amount_t x5("-DM 123.45");
-  ;; amount_t x6("DM -123.45");
-  ;; amount_t x7("123.45 euro");
-  ;; amount_t x8("-123.45 euro");
-  ;; amount_t x9("123.45€");
-  ;; amount_t x10("-123.45€");
+  (let ((x1 (amount "$123.45"))
+	(x2 (amount "-$123.45"))
+	(x3 (amount "$-123.45"))
+	(x4 (amount "DM 123.45"))
+	(x5 (amount "-DM 123.45"))
+	(x6 (amount "DM -123.45"))
+	(x7 (amount "123.45 euro"))
+	(x8 (amount "-123.45 euro"))
+	#-ecl (x9 (amount "123.45€"))
+	#-ecl (x10 (amount "-123.45€")))
 
-  ;; assert-value-equal(amount_t("$-123.45"), - x1);
-  ;; assert-value-equal(amount_t("$123.45"), - x2);
-  ;; assert-value-equal(amount_t("$123.45"), - x3);
-  ;; assert-value-equal(amount_t("DM -123.45"), - x4);
-  ;; assert-value-equal(amount_t("DM 123.45"), - x5);
-  ;; assert-value-equal(amount_t("DM 123.45"), - x6);
-  ;; assert-value-equal(amount_t("-123.45 euro"), - x7);
-  ;; assert-value-equal(amount_t("123.45 euro"), - x8);
-  ;; assert-value-equal(amount_t("-123.45€"), - x9);
-  ;; assert-value-equal(amount_t("123.45€"), - x10);
+    (assert-value-equal (amount "$-123.45") (negate x1))
+    (assert-value-equal (amount "$123.45") (negate x2))
+    (assert-value-equal (amount "$123.45") (negate x3))
+    (assert-value-equal (amount "DM -123.45") (negate x4))
+    (assert-value-equal (amount "DM 123.45") (negate x5))
+    (assert-value-equal (amount "DM 123.45") (negate x6))
+    (assert-value-equal (amount "-123.45 euro") (negate x7))
+    (assert-value-equal (amount "123.45 euro") (negate x8))
+    #-ecl (assert-value-equal (amount "-123.45€") (negate x9))
+    #-ecl (assert-value-equal (amount "123.45€") (negate x10))
 
-  ;; assert-value-equal(amount_t("$-123.45"), x1.negate());
-  ;; assert-value-equal(amount_t("$123.45"), x2.negate());
-  ;; assert-value-equal(amount_t("$123.45"), x3.negate());
+    (assert-value-equal (amount "$-123.45") (negate x1))
+    (assert-value-equal (amount "$123.45") (negate x2))
+    (assert-value-equal (amount "$123.45") (negate x3))
 
-  ;; assert-value-equal(string("$-123.45"), (- x1).to_string());
-  ;; assert-value-equal(string("$123.45"), (- x2).to_string());
-  ;; assert-value-equal(string("$123.45"), (- x3).to_string());
-  ;; assert-value-equal(string("DM -123.45"), (- x4).to_string());
-  ;; assert-value-equal(string("DM 123.45"), (- x5).to_string());
-  ;; assert-value-equal(string("DM 123.45"), (- x6).to_string());
-  ;; assert-value-equal(string("-123.45 euro"), (- x7).to_string());
-  ;; assert-value-equal(string("123.45 euro"), (- x8).to_string());
-  ;; assert-value-equal(string("-123.45€"), (- x9).to_string());
-  ;; assert-value-equal(string("123.45€"), (- x10).to_string());
+    (assert-equal "$-123.45" (format-value (negate x1)))
+    (assert-equal "$123.45" (format-value (negate x2)))
+    (assert-equal "$123.45" (format-value (negate x3)))
+    (assert-equal "DM -123.45" (format-value (negate x4)))
+    (assert-equal "DM 123.45" (format-value (negate x5)))
+    (assert-equal "DM 123.45" (format-value (negate x6)))
+    (assert-equal "-123.45 euro" (format-value (negate x7)))
+    (assert-equal "123.45 euro" (format-value (negate x8)))
+    #-ecl (assert-equal "-123.45€" (format-value (negate x9)))
+    #-ecl (assert-equal "123.45€" (format-value (negate x10)))
 
-  ;; assert-value-equal(amount_t("$-123.45"), x1.negate());
-  ;; assert-value-equal(amount_t("$123.45"), x2.negate());
-  ;; assert-value-equal(amount_t("$123.45"), x3.negate());
+    (assert-value-equal (amount "$-123.45") (negate x1))
+    (assert-value-equal (amount "$123.45") (negate x2))
+    (assert-value-equal (amount "$123.45") (negate x3))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  ;; assert-valid(x6);
-  ;; assert-valid(x7);
-  ;; assert-valid(x8);
-  ;; assert-valid(x9);
-  ;; assert-valid(x10);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)
+    (assert-valid x5)
+    (assert-valid x6)
+    (assert-valid x7)
+    (assert-valid x8)
+    #-ecl (assert-valid x9)
+    #-ecl (assert-valid x10)))
 
 (define-test abs ()
-  ;; amount_t x0;
-  ;; amount_t x1(-1234L);
-  ;; amount_t x2(1234L);
+  (let ((x1 (amount -1234))
+	(x2 (amount 1234)))
 
-  ;; assert-condition(x0.abs(), amount_error);
-  ;; assert-value-equal(amount_t(1234L), x1.abs());
-  ;; assert-value-equal(amount_t(1234L), x2.abs());
+    (assert-value-equal (amount 1234) (value-abs x1))
+    (assert-value-equal (amount 1234) (value-abs x2))
 
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  )
+    (assert-valid x1)
+    (assert-valid x2)))
 
 (define-test commodity-abs ()
-  ;; amount_t x1("$-1234.56");
-  ;; amount_t x2("$1234.56");
+  (let ((x1 (amount "$-1234.56"))
+	(x2 (amount "$1234.56")))
 
-  ;; assert-value-equal(amount_t("$1234.56"), x1.abs());
-  ;; assert-value-equal(amount_t("$1234.56"), x2.abs());
+    (assert-value-equal (amount "$1234.56") (value-abs x1))
+    (assert-value-equal (amount "$1234.56") (value-abs x2))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  )
+    (assert-valid x1)
+    (assert-valid x2)))
 
 (define-test fractional-round ()
-  ;; amount_t x0;
-  ;; amount_t x1("1234.567890");
+  (let ((x1 (amount "1234.567890")))
+    (assert-value-equal 6 (amount-precision x1))
+  
+    (let ((y7 (value-round x1 7))
+	  (y6 (value-round x1 6))
+	  (y5 (value-round x1 5))
+	  (y4 (value-round x1 4))
+	  (y3 (value-round x1 3))
+	  (y2 (value-round x1 2))
+	  (y1 (value-round x1 1))
+	  (y0 (value-round x1 0)))
 
-  ;; assert-condition(x0.precision(), amount_error);
-  ;; assert-condition(x0.round(), amount_error);
-  ;; assert-condition(x0.round(2), amount_error);
-  ;; assert-condition(x0.unround(), amount_error);
-  ;; assert-value-equal(amount_t::precision_t(6), x1.precision());
+      (assert-equal 6 (amount-precision y7))
+      (assert-equal 6 (amount-precision y6))
+      (assert-equal 5 (amount-precision y5))
+      (assert-equal 4 (amount-precision y4))
+      (assert-equal 3 (amount-precision y3))
+      (assert-equal 2 (amount-precision y2))
+      (assert-equal 1 (amount-precision y1))
+      (assert-equal 0 (amount-precision y0))
 
-  ;; amount_t x1b(x1.unround());
+      (assert-value-equal (amount "1234.56789") y7)
+      (assert-value-equal (amount "1234.56789") y6)
+      (assert-value-equal (amount "1234.56789") y5)
+      (assert-value-equal (amount "1234.5679") y4)
+      (assert-value-equal (amount "1234.568") y3)
+      (assert-value-equal (amount "1234.57") y2)
+      (assert-value-equal (amount "1234.6") y1)
+      (assert-value-equal (amount "1235") y0))
+  
+    (let ((x2 (amount "9876.543210")))
+      (assert-value-equal (amount "9876.543210") (value-round x2 6))
+      (assert-value-equal (amount "9876.54321") (value-round x2 5))
+      (assert-value-equal (amount "9876.5432") (value-round x2 4))
+      (assert-value-equal (amount "9876.543") (value-round x2 3))
+      (assert-value-equal (amount "9876.54") (value-round x2 2))
+      (assert-value-equal (amount "9876.5") (value-round x2 1))
+      (assert-value-equal (amount "9877") (value-round x2 0)))
 
-  ;; assert-value-equal(x1b.precision(), x1b.unround().precision());
+    (let ((x3 (amount "-1234.567890")))
+      (assert-value-equal (amount "-1234.56789") (value-round x3 6))
+      (assert-value-equal (amount "-1234.56789") (value-round x3 5))
+      (assert-value-equal (amount "-1234.5679") (value-round x3 4))
+      (assert-value-equal (amount "-1234.568") (value-round x3 3))
+      (assert-value-equal (amount "-1234.57") (value-round x3 2))
+      (assert-value-equal (amount "-1234.6") (value-round x3 1))
+      (assert-value-equal (amount "-1235") (value-round x3 0)))
 
-  ;; amount_t y7(x1.round(7));
-  ;; amount_t y6(x1.round(6));
-  ;; amount_t y5(x1.round(5));
-  ;; amount_t y4(x1.round(4));
-  ;; amount_t y3(x1.round(3));
-  ;; amount_t y2(x1.round(2));
-  ;; amount_t y1(x1.round(1));
-  ;; amount_t y0(x1.round(0));
+    (let ((x4 (amount "-9876.543210")))
+      (assert-value-equal (amount "-9876.543210") (value-round x4 6))
+      (assert-value-equal (amount "-9876.54321") (value-round x4 5))
+      (assert-value-equal (amount "-9876.5432") (value-round x4 4))
+      (assert-value-equal (amount "-9876.543") (value-round x4 3))
+      (assert-value-equal (amount "-9876.54") (value-round x4 2))
+      (assert-value-equal (amount "-9876.5") (value-round x4 1))
+      (assert-value-equal (amount "-9877") (value-round x4 0)))
 
-  ;; assert-value-equal(amount_t::precision_t(6), y7.precision());
-  ;; assert-value-equal(amount_t::precision_t(6), y6.precision());
-  ;; assert-value-equal(amount_t::precision_t(5), y5.precision());
-  ;; assert-value-equal(amount_t::precision_t(4), y4.precision());
-  ;; assert-value-equal(amount_t::precision_t(3), y3.precision());
-  ;; assert-value-equal(amount_t::precision_t(2), y2.precision());
-  ;; assert-value-equal(amount_t::precision_t(1), y1.precision());
-  ;; assert-value-equal(amount_t::precision_t(0), y0.precision());
-
-  ;; assert-value-equal(amount_t("1234.56789"), y7);
-  ;; assert-value-equal(amount_t("1234.56789"), y6);
-  ;; assert-value-equal(amount_t("1234.56789"), y5);
-  ;; assert-value-equal(amount_t("1234.5679"), y4);
-  ;; assert-value-equal(amount_t("1234.568"), y3);
-  ;; assert-value-equal(amount_t("1234.57"), y2);
-  ;; assert-value-equal(amount_t("1234.6"), y1);
-  ;; assert-value-equal(amount_t("1235"), y0);
-
-  ;; amount_t x2("9876.543210");
-
-  ;; assert-value-equal(amount_t("9876.543210"), x2.round(6));
-  ;; assert-value-equal(amount_t("9876.54321"), x2.round(5));
-  ;; assert-value-equal(amount_t("9876.5432"), x2.round(4));
-  ;; assert-value-equal(amount_t("9876.543"), x2.round(3));
-  ;; assert-value-equal(amount_t("9876.54"), x2.round(2));
-  ;; assert-value-equal(amount_t("9876.5"), x2.round(1));
-  ;; assert-value-equal(amount_t("9877"), x2.round(0));
-
-  ;; amount_t x3("-1234.567890");
-
-  ;; assert-value-equal(amount_t("-1234.56789"), x3.round(6));
-  ;; assert-value-equal(amount_t("-1234.56789"), x3.round(5));
-  ;; assert-value-equal(amount_t("-1234.5679"), x3.round(4));
-  ;; assert-value-equal(amount_t("-1234.568"), x3.round(3));
-  ;; assert-value-equal(amount_t("-1234.57"), x3.round(2));
-  ;; assert-value-equal(amount_t("-1234.6"), x3.round(1));
-  ;; assert-value-equal(amount_t("-1235"), x3.round(0));
-
-  ;; amount_t x4("-9876.543210");
-
-  ;; assert-value-equal(amount_t("-9876.543210"), x4.round(6));
-  ;; assert-value-equal(amount_t("-9876.54321"), x4.round(5));
-  ;; assert-value-equal(amount_t("-9876.5432"), x4.round(4));
-  ;; assert-value-equal(amount_t("-9876.543"), x4.round(3));
-  ;; assert-value-equal(amount_t("-9876.54"), x4.round(2));
-  ;; assert-value-equal(amount_t("-9876.5"), x4.round(1));
-  ;; assert-value-equal(amount_t("-9877"), x4.round(0));
-
-  ;; amount_t x5("0.0000000000000000000000000000000000001");
-
-  ;; assert-value-equal(amount_t("0.0000000000000000000000000000000000001"), x5.round(37));
-  ;; assert-value-equal(amount_t(0L), x5.round(36));
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  )
+    (let ((x5 (amount "0.0000000000000000000000000000000000001")))
+      (assert-value-equal (amount "0.0000000000000000000000000000000000001")
+			  (value-round x5 37))
+      (assert-value-equal (amount 0) (value-round x5 36)))))
 
 (define-test commodity-round ()
-  ;; amount_t x1(internalAmount("$1234.567890"));
+  (let ((x1 (exact-amount "$1234.567890")))
+    (assert-value-equal (exact-amount "$1234.56789") (value-round x1 6))
+    (assert-value-equal (exact-amount "$1234.56789") (value-round x1 5))
+    (assert-value-equal (exact-amount "$1234.5679") (value-round x1 4))
+    (assert-value-equal (exact-amount "$1234.568") (value-round x1 3))
+    (assert-value-equal (amount "$1234.57") (value-round x1 2))
+    (assert-value-equal (amount "$1234.6") (value-round x1 1))
+    (assert-value-equal (amount "$1235") (value-round x1 0)))
 
-  ;; assert-value-equal(internalAmount("$1234.56789"), x1.round(6));
-  ;; assert-value-equal(internalAmount("$1234.56789"), x1.round(5));
-  ;; assert-value-equal(internalAmount("$1234.5679"), x1.round(4));
-  ;; assert-value-equal(internalAmount("$1234.568"), x1.round(3));
-  ;; assert-value-equal(amount_t("$1234.57"), x1.round(2));
-  ;; assert-value-equal(amount_t("$1234.6"), x1.round(1));
-  ;; assert-value-equal(amount_t("$1235"), x1.round(0));
+  (let ((x2 (exact-amount "$9876.543210")))
+    (assert-value-equal (exact-amount "$9876.543210") (value-round x2 6))
+    (assert-value-equal (exact-amount "$9876.54321") (value-round x2 5))
+    (assert-value-equal (exact-amount "$9876.5432") (value-round x2 4))
+    (assert-value-equal (exact-amount "$9876.543") (value-round x2 3))
+    (assert-value-equal (amount "$9876.54") (value-round x2 2))
+    (assert-value-equal (amount "$9876.5") (value-round x2 1))
+    (assert-value-equal (amount "$9877") (value-round x2 0)))
 
-  ;; amount_t x2(internalAmount("$9876.543210"));
+  (let ((x3 (exact-amount "$-1234.567890")))
+    (assert-value-equal (exact-amount "$-1234.56789") (value-round x3 6))
+    (assert-value-equal (exact-amount "$-1234.56789") (value-round x3 5))
+    (assert-value-equal (exact-amount "$-1234.5679") (value-round x3 4))
+    (assert-value-equal (exact-amount "$-1234.568") (value-round x3 3))
+    (assert-value-equal (amount "$-1234.57") (value-round x3 2))
+    (assert-value-equal (amount "$-1234.6") (value-round x3 1))
+    (assert-value-equal (amount "$-1235") (value-round x3 0)))
 
-  ;; assert-value-equal(internalAmount("$9876.543210"), x2.round(6));
-  ;; assert-value-equal(internalAmount("$9876.54321"), x2.round(5));
-  ;; assert-value-equal(internalAmount("$9876.5432"), x2.round(4));
-  ;; assert-value-equal(internalAmount("$9876.543"), x2.round(3));
-  ;; assert-value-equal(amount_t("$9876.54"), x2.round(2));
-  ;; assert-value-equal(amount_t("$9876.5"), x2.round(1));
-  ;; assert-value-equal(amount_t("$9877"), x2.round(0));
+  (let ((x4 (exact-amount "$-9876.543210")))
+    (assert-value-equal (exact-amount "$-9876.543210") (value-round x4 6))
+    (assert-value-equal (exact-amount "$-9876.54321") (value-round x4 5))
+    (assert-value-equal (exact-amount "$-9876.5432") (value-round x4 4))
+    (assert-value-equal (exact-amount "$-9876.543") (value-round x4 3))
+    (assert-value-equal (amount "$-9876.54") (value-round x4 2))
+    (assert-value-equal (amount "$-9876.5") (value-round x4 1))
+    (assert-value-equal (amount "$-9877") (value-round x4 0)))
 
-  ;; amount_t x3(internalAmount("$-1234.567890"));
+  (let ((x5 (amount "$123.45")))
+    (multiply* x5 (amount "100.12"))
 
-  ;; assert-value-equal(internalAmount("$-1234.56789"), x3.round(6));
-  ;; assert-value-equal(internalAmount("$-1234.56789"), x3.round(5));
-  ;; assert-value-equal(internalAmount("$-1234.5679"), x3.round(4));
-  ;; assert-value-equal(internalAmount("$-1234.568"), x3.round(3));
-  ;; assert-value-equal(amount_t("$-1234.57"), x3.round(2));
-  ;; assert-value-equal(amount_t("$-1234.6"), x3.round(1));
-  ;; assert-value-equal(amount_t("$-1235"), x3.round(0));
-
-  ;; amount_t x4(internalAmount("$-9876.543210"));
-
-  ;; assert-value-equal(internalAmount("$-9876.543210"), x4.round(6));
-  ;; assert-value-equal(internalAmount("$-9876.54321"), x4.round(5));
-  ;; assert-value-equal(internalAmount("$-9876.5432"), x4.round(4));
-  ;; assert-value-equal(internalAmount("$-9876.543"), x4.round(3));
-  ;; assert-value-equal(amount_t("$-9876.54"), x4.round(2));
-  ;; assert-value-equal(amount_t("$-9876.5"), x4.round(1));
-  ;; assert-value-equal(amount_t("$-9877"), x4.round(0));
-
-  ;; amount_t x5("$123.45");
-
-  ;; x5 *= 100.12;
-
-  ;; assert-value-equal(internalAmount("$12359.814"), x5);
-  ;; assert-value-equal(string("$12359.81"), x5.to_string());
-  ;; assert-value-equal(string("$12359.814"), x5.to_fullstring());
-  ;; assert-value-equal(string("$12359.814"), x5.unround().to_string());
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x5);
-  )
+    (assert-value-equal (exact-amount "$12359.814") x5)
+    (assert-equal "$12,359.81" (format-value x5))
+    (assert-equal "$12,359.8140" (format-value x5 :full-precision-p t))))
 
 (define-test commodity-display-round ()
-  ;; amount_t x1("$0.85");
-  ;; amount_t x2("$0.1");
+  (let ((x1 (amount "$0.85"))
+	(x2 (amount "$0.1")))
 
-  ;; x1 *= 0.19;
+    (multiply* x1 (amount "0.19"))
 
-  ;; assert-value-not-equal(amount_t("$0.16"), x1);
-  ;; assert-value-equal(internalAmount("$0.1615"), x1);
-  ;; assert-value-equal(string("$0.16"), x1.to_string());
+    (assert-value-not-equal (amount "$0.16") x1)
+    (assert-value-equalp (amount "$0.16") x1)
+    (assert-value-equal (exact-amount "$0.1615") x1)
+    (assert-equal "$0.16" (format-value x1))
 
-  ;; assert-value-equal(amount_t("$0.10"), x2);
-  ;; assert-value-not-equal(internalAmount("$0.101"), x2);
-  ;; assert-value-equal(string("$0.10"), x2.to_string());
+    (assert-value-equal (amount "$0.10") x2)
+    (assert-value-not-equal (exact-amount "$0.101") x2)
+    (assert-equal "$0.10" (format-value x2))
 
-  ;; x1 *= 7L;
+    (multiply* x1 7)
 
-  ;; assert-value-not-equal(amount_t("$1.13"), x1);
-  ;; assert-value-equal(internalAmount("$1.1305"), x1);
-  ;; assert-value-equal(string("$1.13"), x1.to_string());
-  )
+    (assert-value-not-equal (amount "$1.13") x1)
+    (assert-value-equal (exact-amount "$1.1305") x1)
+    (assert-equal "$1.13" (format-value x1))))
 
-(define-test reduction ()
-  ;; amount_t x0;
-  ;; amount_t x1("60s");
-  ;; amount_t x2("600s");
-  ;; amount_t x3("6000s");
-  ;; amount_t x4("360000s");
-  ;; amount_t x5("10m");		// 600s
-  ;; amount_t x6("100m");		// 6000s
-  ;; amount_t x7("1000m");		// 60000s
-  ;; amount_t x8("10000m");	// 600000s
-  ;; amount_t x9("10h");		// 36000s
-  ;; amount_t x10("100h");		// 360000s
-  ;; amount_t x11("1000h");	// 3600000s
-  ;; amount_t x12("10000h");	// 36000000s
+;; (define-test reduction ()
+;;   (let ((x1 (amount "60s"))
+;; 	(x2 (amount "600s"))
+;; 	(x3 (amount "6000s"))
+;; 	(x4 (amount "360000s"))
+;; 	(x5 (amount "10m"))   ;; 600s
+;; 	(x6 (amount "100m"))  ;; 6000s
+;; 	(x7 (amount "1000m")) ;; 60000s
+;; 	(x8 (amount "10000m"))	;; 600000s
+;; 	(x9 (amount "10h"))	;; 36000s
+;; 	(x10 (amount "100h"))	;; 360000s
+;; 	(x11 (amount "1000h"))	;; 3600000s
+;; 	(x12 (amount "10000h"))) ;; 36000000s
 
-  ;; assert-condition(x0.reduce(), amount_error);
-  ;; assert-condition(x0.unreduce(), amount_error);
-  ;; assert-value-equal(x2, x5);
-  ;; assert-value-equal(x3, x6);
-  ;; assert-value-equal(x4, x10);
-  ;; assert-value-equal(string("100.0h"), x4.unreduce().to_string());
-  )
+;;     (assert-value-equal x2 x5)
+;;     (assert-value-equal x3 x6)
+;;     (assert-value-equal x4 x10)
+;;     (assert-equal "100.0h" (format-value (largest-units x4)))))
 
 (define-test sign ()
-  ;; amount_t x0;
-  ;; amount_t x1("0.0000000000000000000000000000000000001");
-  ;; amount_t x2("-0.0000000000000000000000000000000000001");
-  ;; amount_t x3("1");
-  ;; amount_t x4("-1");
+  (let ((x1 (amount "0.0000000000000000000000000000000000001"))
+	(x2 (amount "-0.0000000000000000000000000000000000001"))
+	(x3 (amount "1"))
+	(x4 (amount "-1")))
 
-  ;; assert-condition(x0.sign(), amount_error);
-  ;; assert-true(x1.sign() > 0);
-  ;; assert-true(x2.sign() < 0);
-  ;; assert-true(x3.sign() > 0);
-  ;; assert-true(x4.sign() < 0);
+    (assert-true (> (sign x1) 0))
+    (assert-true (< (sign x2) 0))
+    (assert-true (> (sign x3) 0))
+    (assert-true (< (sign x4) 0))
 
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)))
 
 (define-test commodity-sign ()
-  ;; amount_t x1(internalAmount("$0.0000000000000000000000000000000000001"));
-  ;; amount_t x2(internalAmount("$-0.0000000000000000000000000000000000001"));
-  ;; amount_t x3("$1");
-  ;; amount_t x4("$-1");
+  (let ((x1 (exact-amount "$0.0000000000000000000000000000000000001"))
+	(x2 (exact-amount "$-0.0000000000000000000000000000000000001"))
+	(x3 (amount "$1"))
+	(x4 (amount "$-1")))
 
-  ;; assert-true(x1.sign() != 0);
-  ;; assert-true(x2.sign() != 0);
-  ;; assert-true(x3.sign() > 0);
-  ;; assert-true(x4.sign() < 0);
+    (assert-true (/= (sign x1) 0))
+    (assert-true (/= (sign x2) 0))
+    (assert-true (> (sign x3) 0))
+    (assert-true (< (sign x4) 0))
 
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  )
+    (assert-valid x1)
+    (assert-valid x2)
+    (assert-valid x3)
+    (assert-valid x4)))
 
 (define-test truth ()
-  ;; amount_t x0;
-  ;; amount_t x1("1234");
-  ;; amount_t x2("1234.56");
+  (let ((x1 (amount "1234"))
+	(x2 (amount "1234.56")))
 
-  ;; assert-condition(assert(x0 ? 1 : 0), amount_error);
+    (assert-true x1)
+    (assert-true x2)
 
-  ;; assert-true(x1);
-  ;; assert-true(x2);
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  )
+    (assert-valid x1)
+    (assert-valid x2)))
 
 (define-test commodity-truth ()
-  ;; amount_t x1("$1234");
-  ;; amount_t x2("$1234.56");
+  (let ((x1 (amount "$1234"))
+	(x2 (amount "$1234.56")))
 
-  ;; if (x1)
-  ;;   assert-true(true);
-  ;; else
-  ;;   assert-true(false);
+    (assert-true (value-truth x1))
+    (assert-true (value-truth x2))
 
-  ;; if (x2)
-  ;;   assert-true(true);
-  ;; else
-  ;;   assert-true(false);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  )
+    (assert-valid x1)
+    (assert-valid x2)))
 
 (define-test for-zero ()
-  ;; amount_t x0;
-  ;; amount_t x1("0.000000000000000000001");
+  (let ((x1 (amount "0.000000000000000000001")))
 
-  ;; assert-true(x1);
-  ;; assert-condition(x0.is_zero(), amount_error);
-  ;; assert-condition(x0.is_realzero(), amount_error);
-  ;; assert-false(x1.is_zero());
-  ;; assert-false(x1.is_realzero());
+    (assert-true (value-truth x1))
+    (assert-true (value-truth* x1))
+    (assert-false (value-zerop x1))
+    (assert-false (value-zerop* x1))
 
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  )
+    (assert-valid x1)))
 
 (define-test commodity-for-zero ()
-  ;; amount_t x1(internalAmount("$0.000000000000000000001"));
+  (let ((x1 (amount* "$0.000000000000000000001")))
 
-  ;; assert-false(x1);
-  ;; assert-true(x1.is_zero());
-  ;; assert-false(x1.is_realzero());
+    (assert-false (value-truth x1))
+    (assert-true (value-truth* x1))
+    (assert-true (value-zerop x1))
+    (assert-false (value-zerop* x1))
 
-  ;; assert-valid(x1);
-  )
-
-(define-test integer-conversion ()
-  ;; amount_t x0;
-  ;; amount_t x1(123456L);
-  ;; amount_t x2("12345682348723487324");
-
-  ;; assert-condition(x0.to_long(), amount_error);
-  ;; assert-condition(x0.to_double(), amount_error);
-  ;; assert-false(x2.fits_in_long());
-  ;; assert-value-equal(123456L, x1.to_long());
-  ;; assert-value-equal(123456.0, x1.to_double());
-  ;; assert-value-equal(string("123456"), x1.to_string());
-  ;; assert-value-equal(string("123456"), x1.quantity_string());
-
-  ;; assert-valid(x1);
-  )
-
-(define-test fractional-conversion ()
-  ;; amount_t x1(1234.56);
-  ;; amount_t x2("1234.5683787634678348734");
-
-  ;; assert-condition(x1.to_long(), amount_error); // loses precision
-  ;; assert-condition(x2.to_double(), amount_error); // loses precision
-  ;; assert-false(x2.fits_in_double());
-  ;; assert-value-equal(1234L, x1.to_long(true));
-  ;; assert-value-equal(1234.56, x1.to_double());
-  ;; assert-value-equal(string("1234.56"), x1.to_string());
-  ;; assert-value-equal(string("1234.56"), x1.quantity_string());
-
-  ;; assert-valid(x1);
-  )
-
-(define-test commodity-conversion ()
-  ;; amount_t x1("$1234.56");
-
-  ;; assert-condition(x1.to_long(), amount_error); // loses precision
-  ;; assert-value-equal(1234L, x1.to_long(true));
-  ;; assert-value-equal(1234.56, x1.to_double());
-  ;; assert-value-equal(string("$1234.56"), x1.to_string());
-  ;; assert-value-equal(string("1234.56"), x1.quantity_string());
-
-  ;; assert-valid(x1);
-  )
-
-(define-test printing ()
-  ;; amount_t x0;
-  ;; amount_t x1("982340823.380238098235098235098235098");
-
-  ;; {
-  ;;   std::ostringstream bufstr;
-  ;;   assert-condition(bufstr << x0, amount_error);
-  ;; }
-
-  ;; {
-  ;;   std::ostringstream bufstr;
-  ;;   bufstr << x1;
-
-  ;;   assert-value-equal(std::string("982340823.380238098235098235098235098"), bufstr.str());
-  ;; }
-
-  ;; assert-valid(x0);
-  ;; assert-valid(x1);
-  )
-
-(define-test commodity-printing ()
-  ;; amount_t x1(internalAmount("$982340823.386238098235098235098235098"));
-  ;; amount_t x2("$982340823.38");
-
-  ;; {
-  ;;   std::ostringstream bufstr;
-  ;;   bufstr << x1;
-
-  ;;   assert-value-equal(std::string("$982340823.386238098235098235098235098"), bufstr.str());
-  ;; }
-
-  ;; {
-  ;;   std::ostringstream bufstr;
-  ;;   bufstr << (x1 * x2).to_string();
-
-  ;;   assert-value-equal(std::string("$964993493285024293.18099172508158508135413499124"), bufstr.str());
-  ;; }
-
-  ;; {
-  ;;   std::ostringstream bufstr;
-  ;;   bufstr << (x2 * x1).to_string();
-
-  ;;   assert-value-equal(std::string("$964993493285024293.18"), bufstr.str());
-  ;; }
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  )
-
-(define-test serialization ()
-  ;; amount_t x0;
-  ;; amount_t x1("$8,192.34");
-  ;; amount_t x2("8192.34");
-  ;; amount_t x3("8192.34");
-  ;; amount_t x4("-8192.34");
-  ;; amount_t x5(x4);
-
-  ;; // Force x3's pointer to actually be set to null_commodity
-  ;; x3.set_commodity(*x3.current_pool->null_commodity);
-
-  ;; std::string buf;
-  ;; {
-  ;;   std::ostringstream storage;
-  ;;   assert-condition(x0.write(storage), amount_error);
-  ;;   x1.write(storage);
-  ;;   x2.write(storage);
-  ;;   x3.write(storage);
-  ;;   x4.write(storage);
-  ;;   x5.write(storage);
-  ;;   buf = storage.str();
-  ;; }
-
-  ;; amount_t x1b;
-  ;; amount_t x2b;
-  ;; amount_t x3b;
-  ;; amount_t x4b;
-  ;; amount_t x5b;
-  ;; {
-  ;;   std::istringstream storage(buf);
-  ;;   x1b.read(storage);
-  ;;   x2b.read(storage);
-  ;;   x3b.read(storage);
-  ;;   x4b.read(storage);
-  ;;   x5b.read(storage);
-  ;; }
-
-  ;; assert-value-equal(x1, x1b);
-  ;; assert-value-equal(x2, x2b);
-  ;; assert-value-equal(x3, x3b);
-  ;; assert-value-equal(x4, x4b);
-
-  ;; const char * ptr = buf.c_str();
-
-  ;; amount_t x1c;
-  ;; amount_t x2c;
-  ;; amount_t x3c;
-  ;; amount_t x4c;
-  ;; amount_t x5c;
-  ;; {
-  ;;   x1c.read(ptr);
-  ;;   x2c.read(ptr);
-  ;;   x3c.read(ptr);
-  ;;   x4c.read(ptr);
-  ;;   x5c.read(ptr);
-  ;; }
-
-  ;; assert-value-equal(x1, x1b);
-  ;; assert-value-equal(x2, x2b);
-  ;; assert-value-equal(x3, x3b);
-  ;; assert-value-equal(x4, x4b);
-
-  ;; assert-valid(x1);
-  ;; assert-valid(x2);
-  ;; assert-valid(x3);
-  ;; assert-valid(x4);
-  ;; assert-valid(x1b);
-  ;; assert-valid(x2b);
-  ;; assert-valid(x3b);
-  ;; assert-valid(x4b);
-  ;; assert-valid(x1c);
-  ;; assert-valid(x2c);
-  ;; assert-valid(x3c);
-  ;; assert-valid(x4c);
-  )
+    (assert-valid x1)))
 
 (textui-test-run (get-suite commodity-test-case))
 (textui-test-run (get-suite amount-test-case))
