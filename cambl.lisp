@@ -324,6 +324,7 @@
 	   divide*
 
 	   optimize-value
+	   amount-of-value
 	   print-value
 	   format-value
 	   quantity-string
@@ -586,6 +587,7 @@
 (defgeneric divide* (value-a value-b))
 
 (defgeneric optimize-value (value))
+(defgeneric amount-of-value (value))
 
 (defgeneric print-value (value &key output-stream omit-commodity-p
 			       full-precision-p width latter-width line-feed-string))
@@ -1140,21 +1142,15 @@
 	(right-rounded (value-maybe-round right)))
     (compare* left-rounded right-rounded)))
 (defmethod compare ((left balance) (right integer))
-  (if (= (balance-commodity-count left) 1)
-      (compare (balance-first-amount left) right)
-      (error "Cannot compare balances with integers")))
+  (compare (amount-of-value left) right))
 (defmethod compare ((left balance) (right amount))
-  (if (= (balance-commodity-count left) 1)
-      (compare (balance-first-amount left) right)
-      (error "Cannot compare balances with amounts")))
+  (compare (amount-of-value left) right))
 (defmethod compare ((left integer) (right balance))
-  (if (= (balance-commodity-count right) 1)
-      (compare left (balance-first-amount right))
-      (error "Cannot compare balances with integers")))
+  (compare left (amount-of-value right)))
 (defmethod compare ((left amount) (right balance))
-  (if (= (balance-commodity-count right) 1)
-      (compare left (balance-first-amount right))
-      (error "Cannot compare balances with amounts")))
+  (compare left (amount-of-value right)))
+(defmethod compare ((left balance) (right balance))
+  (compare (amount-of-value left) (amount-of-value right)))
 
 (defmethod compare* ((left integer) (right integer))
   (- left right))
@@ -1178,21 +1174,15 @@
 	     (- (amount-quantity left) (amount-quantity tmp)))))))
 
 (defmethod compare* ((left balance) (right integer))
-  (if (= (balance-commodity-count left) 1)
-      (compare* (balance-first-amount left) right)
-      (error "Cannot compare* balances with integers")))
+  (compare* (amount-of-value left) right))
 (defmethod compare* ((left balance) (right amount))
-  (if (= (balance-commodity-count left) 1)
-      (compare* (balance-first-amount left) right)
-      (error "Cannot compare* balances with amounts")))
+  (compare* (amount-of-value left) right))
 (defmethod compare* ((left integer) (right balance))
-  (if (= (balance-commodity-count right) 1)
-      (compare* left (balance-first-amount right))
-      (error "Cannot compare* balances with integers")))
+  (compare* left (amount-of-value right)))
 (defmethod compare* ((left amount) (right balance))
-  (if (= (balance-commodity-count right) 1)
-      (compare* left (balance-first-amount right))
-      (error "Cannot compare* balances with amounts")))
+  (compare* left (amount-of-value right)))
+(defmethod compare* ((left balance) (right balance))
+  (compare* (amount-of-value left) (amount-of-value right)))
 
 (defun sign (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
@@ -1823,7 +1813,7 @@
 
 ;;;_ * BALANCE specific
 
-;;;_  + Optimize the given value, returning its cheaper equivalent
+;;;_  + Optimize the given value, returning its cheapest equivalent
 
 (defmethod optimize-value ((integer integer))
   integer)
@@ -1842,6 +1832,21 @@
 	  (if (= 1 (length amounts-map))
 	      (optimize-value (copy-amount (cdr (first amounts-map))))
 	      balance)))))
+
+(defmethod amount-of-value ((integer integer))
+  (integer-to-amount integer))
+
+(defmethod amount-of-value ((amount amount))
+  amount)
+
+(defmethod amount-of-value ((balance balance))
+  (let ((amounts-map (get-amounts-map balance)))
+    (if (or (null amounts-map)
+	    (cl:zerop (length amounts-map)))
+	(integer-to-amount 0)
+	(if (= 1 (length amounts-map))
+	    (cdr (first amounts-map))
+	    (error "Cannot yield amount of a multi-commodity balance")))))
 
 ;;;_  + Print and format AMOUNT and BALANCE
 
