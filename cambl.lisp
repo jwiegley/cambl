@@ -1438,31 +1438,24 @@
   (- integer))
 
 (defmethod negate ((amount amount))
-  (assert amount)
   (negate* (copy-amount amount)))
 
 (defmethod negate ((balance balance))
-  (let ((tmp (copy-balance balance)))
-    ;; jww (2007-11-17): NYI
-    ;; (negate* tmp)
-    (assert tmp)
-    ))
+  (negate* (copy-balance balance)))
 
 (defmethod negate* ((integer integer))
-  (- integer))
+  (error "Cannot apply in-place negation to an integer"))
 
 (defmethod negate* ((amount amount))
-  (assert amount)
   (setf (amount-quantity amount)
 	(- (amount-quantity amount)))
   amount)
 
 (defmethod negate* ((balance balance))
-  (let ((value-balance (make-instance 'balance)))
-    (mapc #'(lambda (entry)
-	      (add* value-balance (negate (cdr entry))))
-	  (get-amounts-map balance))
-    value-balance))
+  (mapc #'(lambda (entry)
+	    (setf (cdr entry) (negate (cdr entry))))
+	(get-amounts-map balance))
+  balance)
 
 ;;;_  + Binary math operators
 
