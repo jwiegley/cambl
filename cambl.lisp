@@ -2549,18 +2549,20 @@
 ;;;_   : COMMODITY
 
 (defmacro pushend (item the-list &optional final-cons)
-  `(let ((items ,the-list)
-	 (new-cons (list ,item)))
-     (if items
-	 ,(if final-cons
-	      `(prog1
-		   (setf (cdr ,final-cons) new-cons)
-		 (setf ,final-cons new-cons))
-	      `(nconc items new-cons))
-	 (prog1
-	     (setf ,the-list new-cons)
+  (let ((items-sym (gensym))
+	(new-cons-sym (gensym)))
+    `(let* ((,items-sym ,the-list)
+	    (,new-cons-sym (list ,item)))
+       (if ,items-sym
 	   ,(if final-cons
-		`(setf ,final-cons new-cons))))))
+		`(setf (cdr ,final-cons) ,new-cons-sym
+		       ,final-cons ,new-cons-sym)
+		`(nconc ,items-sym ,new-cons-sym))
+	   (progn
+	     ,`(setf ,the-list ,new-cons-sym)
+	     ,(if final-cons
+		  `(setf ,final-cons ,new-cons-sym))))
+       (car ,new-cons-sym))))
 
 (defun create-commodity (name &key (pool *default-commodity-pool*))
   "Create a COMMODITY after the symbol name found by parsing NAME.
