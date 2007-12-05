@@ -1082,19 +1082,27 @@ associated with the given commodity pool.
 (defmethod compare* ((left integer) (right amount))
   (compare* (integer-to-amount left) right))
 
+(declaim (inline resize-quantity))
+(defun resize-quantity (amount precision)
+  (declare (optimize (speed 3) (safety 0)))
+  (locally #+sbcl (declare (sb-ext:muffle-conditions
+			    sb-ext:compiler-note))
+      (* (amount-quantity amount)
+	 (expt 10 (the (unsigned-byte 8)
+		    (- (the fixnum precision)
+		       (amount-precision amount)))))))
+
 (defmethod compare* ((left amount) (right amount))
   (verify-amounts left right "Exactly comparing")
   (the integer
     (cond ((= (amount-precision left) (amount-precision right))
 	   (- (amount-quantity left) (amount-quantity right)))
 	  ((< (amount-precision left) (amount-precision right))
-	   (let ((tmp (copy-amount left)))
-	     (amount--resize tmp (amount-precision right))
-	     (- (amount-quantity tmp) (amount-quantity right))))
+	   (- (resize-quantity left (amount-precision right))
+	      (amount-quantity right)))
 	  (t
-	   (let ((tmp (copy-amount right)))
-	     (amount--resize tmp (amount-precision left))
-	     (- (amount-quantity left) (amount-quantity tmp)))))))
+	   (- (amount-quantity left)
+	      (resize-quantity right (amount-precision left)))))))
 
 (defmethod compare* ((left balance) (right integer))
   (compare* (amount-of-value left) right))
@@ -1385,17 +1393,6 @@ If it is greater, this operation has no effect."
 
 ;;;_   : Addition
 
-(defun amount--resize (amount precision)
-  (assert (< precision 256))
-  (unless (or (not (amount-quantity amount))
-	      (= precision (amount-precision amount)))
-    (assert (> precision (amount-precision amount)))
-    (setf (amount-quantity amount)
-	  (* (amount-quantity amount)
-	     (expt 10 (- precision
-			 (amount-precision amount)))))
-    (setf (amount-precision amount) precision)))
-
 (defmethod add ((left integer) (right integer))
   (+ left right))
 (defmethod add ((left amount) (right integer))
@@ -1433,14 +1430,14 @@ If it is greater, this operation has no effect."
 		       (+ left-quantity right-quantity)))
 		((< (amount-precision left)
 		    (amount-precision right))
-		 (amount--resize left (amount-precision right))
 		 (setf (amount-quantity left)
-		       (+ (amount-quantity left) right-quantity)))
+		       (+ (resize-quantity left (amount-precision right))
+			  right-quantity)
+		       (amount-precision left) (amount-precision right)))
 		(t
-		 (let ((tmp (copy-amount right)))
-		   (amount--resize tmp (amount-precision left))
-		   (setf (amount-quantity left)
-			 (+ left-quantity (amount-quantity tmp))))))
+		 (setf (amount-quantity left)
+		       (+ left-quantity
+			  (resize-quantity right (amount-precision left))))))
 	  left)
 	;; Commodities don't match, so create a balance by merging the two
 	(let ((tmp (make-instance 'balance)))
@@ -1515,14 +1512,14 @@ If it is greater, this operation has no effect."
 		       (- left-quantity right-quantity)))
 		((< (amount-precision left)
 		    (amount-precision right))
-		 (amount--resize left (amount-precision right))
 		 (setf (amount-quantity left)
-		       (- (amount-quantity left) right-quantity)))
+		       (- (resize-quantity left (amount-precision right))
+			  right-quantity)
+		       (amount-precision left) (amount-precision right)))
 		(t
-		 (let ((tmp (copy-amount right)))
-		   (amount--resize tmp (amount-precision left))
-		   (setf (amount-quantity left)
-			 (- left-quantity (amount-quantity tmp))))))
+		 (setf (amount-quantity left)
+		       (- left-quantity
+			  (resize-quantity right (amount-precision left))))))
 	  left)
 	;; Commodities don't match, so create a balance by merging the two
 	(let ((tmp (make-instance 'balance)))
@@ -2088,7 +2085,7 @@ the stream stops and the invalid character is put back."
 (defmethod commodity-equal ((a commodity) (b commodity))
   "Two commodities are EQUAL if they have the same BASIC-COMMODITY.
 They may be of different COMMODITY types, but this is just nomenclature
-(i.e., USD always equals $)."
+That is, USD always equals $."
   (eq (get-basic-commodity a) (get-basic-commodity b)))
 (defmethod commodity-equal ((a commodity) (b annotated-commodity)) nil)
 (defmethod commodity-equal ((a annotated-commodity) (b commodity)) nil)
