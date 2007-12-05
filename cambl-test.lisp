@@ -166,18 +166,18 @@
       (assert-eql (amount-commodity x0) (amount-commodity x12))
       (assert-value-equal x0 x12))
 
-    (let ((x2 (amount "$100.00" :reduce-to-smallest-units-p nil)))
+    (let ((x2 (amount "$100.00")))
       (assert-value-equal x2 x12))
-    (let ((x3 (amount* "$100.00" :reduce-to-smallest-units-p nil)))
+    (let ((x3 (amount* "$100.00")))
       (assert-value-equal x3 x12))
 
     (let ((x4 (amount "$100.00")))
       (assert-value-equal x4 x12))
     (let ((x5 (amount* "$100.00")))
       (assert-value-equal x5 x12))
-    (let ((x6 (amount "$100.00" :reduce-to-smallest-units-p nil)))
+    (let ((x6 (amount "$100.00")))
       (assert-value-equal x6 x12))
-    (let ((x7 (amount* "$100.00" :reduce-to-smallest-units-p nil)))
+    (let ((x7 (amount* "$100.00")))
       (assert-value-equal x7 x12))
 
     (assert-valid x12)))
