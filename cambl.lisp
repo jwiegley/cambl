@@ -1165,7 +1165,8 @@ associated with the given commodity pool.
 	(if (and amounts-map
 		 (= 1 (length amounts-map)))
 	    (let ((amount-value (cdr (assoc (amount-commodity left)
-					    amounts-map))))
+					    amounts-map
+					    :test #'commodity-equal))))
 	      (if amount-value
 		  (funcall test-func amount-value left)))))))
 
@@ -1177,7 +1178,8 @@ associated with the given commodity pool.
 	     (length right-amounts-map))
       (mapc #'(lambda (entry)
 		(let ((right-value
-		       (cdr (assoc (car entry) right-amounts-map))))
+		       (cdr (assoc (car entry) right-amounts-map
+				   :test #'commodity-equal))))
 		  (unless right-value
 		    (return-from balance-equal))
 		  (unless (funcall test-func (cdr entry) right-value)
@@ -1411,7 +1413,8 @@ If it is greater, this operation has no effect."
 
 (declaim (inline amount-in-balance))
 (defun amount-in-balance (balance commodity)
-  (cdr (assoc commodity (get-amounts-map balance))))
+  (cdr (assoc commodity (get-amounts-map balance)
+	      :test #'commodity-equal)))
 
 ;;;_  + Binary math operators
 
@@ -1424,7 +1427,11 @@ If it is greater, this operation has no effect."
 (defmethod add ((left integer) (right amount))
   (add* (integer-to-amount left) right))
 (defmethod add ((left amount) (right amount))
-  (add* (copy-amount left) right))
+  (if (commodity-equal (amount-commodity left)
+		       (amount-commodity right))
+      (add* (copy-amount left) right)
+      ;; Commodities don't match, so create a new balance by merging the two
+      (balance (copy-amount left) (copy-amount right))))
 (defmethod add ((left balance) (right integer))
   (add* (copy-balance left) (integer-to-amount right)))
 (defmethod add ((left balance) (right amount))
@@ -1448,25 +1455,22 @@ If it is greater, this operation has no effect."
 (defmethod add* ((left amount) (right amount))
   (if (commodity-equal (amount-commodity left)
 		       (amount-commodity right))
-      (let ((left-quantity (amount-quantity left))
-	    (right-quantity (amount-quantity right)))
-	(cond ((= (amount-precision left)
-		  (amount-precision right))
-	       (setf (amount-quantity left)
-		     (+ left-quantity right-quantity)))
-	      ((< (amount-precision left)
-		  (amount-precision right))
-	       (setf (amount-quantity left)
-		     (+ (resize-quantity left (amount-precision right))
-			right-quantity)
-		     (amount-precision left) (amount-precision right)))
-	      (t
-	       (setf (amount-quantity left)
-		     (+ left-quantity
-			(resize-quantity right (amount-precision left))))))
-	left)
-      ;; Commodities don't match, so create a new balance by merging the two
-      (balance left right)))
+      (cond ((= (amount-precision left)
+		(amount-precision right))
+	     (setf (amount-quantity left)
+		   (+ (amount-quantity left) (amount-quantity right))))
+	    ((< (amount-precision left)
+		(amount-precision right))
+	     (setf (amount-quantity left)
+		   (+ (resize-quantity left (amount-precision right))
+		      (amount-quantity right))
+		   (amount-precision left) (amount-precision right)))
+	    (t
+	     (setf (amount-quantity left)
+		   (+ (amount-quantity left)
+		      (resize-quantity right (amount-precision left))))))
+      (error "Cannot add amounts \"in place\" of differing commodities"))
+  left)
 
 (defmethod add* ((left balance) (right integer))
   (add* left (integer-to-amount right)))
@@ -1513,7 +1517,11 @@ If it is greater, this operation has no effect."
 (defmethod subtract ((left integer) (right amount))
   (subtract* (integer-to-amount left) right))
 (defmethod subtract ((left amount) (right amount))
-  (subtract* (copy-amount left) right))
+  (if (commodity-equal (amount-commodity left)
+		       (amount-commodity right))
+      (subtract* (copy-amount left) right)
+      ;; Commodities don't match, so create a balance by merging the two
+      (balance (copy-amount left) (negate right))))
 (defmethod subtract ((left balance) (right integer))
   (subtract* (copy-balance left) (integer-to-amount right)))
 (defmethod subtract ((left balance) (right amount))
@@ -1539,25 +1547,22 @@ If it is greater, this operation has no effect."
 (defmethod subtract* ((left amount) (right amount))
   (if (commodity-equal (amount-commodity left)
 		       (amount-commodity right))
-      (let ((left-quantity (amount-quantity left))
-	    (right-quantity (amount-quantity right)))
-	(cond ((= (amount-precision left)
-		  (amount-precision right))
-	       (setf (amount-quantity left)
-		     (- left-quantity right-quantity)))
-	      ((< (amount-precision left)
-		  (amount-precision right))
-	       (setf (amount-quantity left)
-		     (- (resize-quantity left (amount-precision right))
-			right-quantity)
-		     (amount-precision left) (amount-precision right)))
-	      (t
-	       (setf (amount-quantity left)
-		     (- left-quantity
-			(resize-quantity right (amount-precision left))))))
-	left)
-      ;; Commodities don't match, so create a balance by merging the two
-      (balance left (negate right))))
+      (cond ((= (amount-precision left)
+		(amount-precision right))
+	     (setf (amount-quantity left)
+		   (- (amount-quantity left) (amount-quantity right))))
+	    ((< (amount-precision left)
+		(amount-precision right))
+	     (setf (amount-quantity left)
+		   (- (resize-quantity left (amount-precision right))
+		      (amount-quantity right))
+		   (amount-precision left) (amount-precision right)))
+	    (t
+	     (setf (amount-quantity left)
+		   (- (amount-quantity left)
+		      (resize-quantity right (amount-precision left))))))
+      (error "Cannot subtract amounts \"in place\" of differing commodities"))
+  left)
 
 (defmethod subtract* ((left balance) (right integer))
   (subtract* left (integer-to-amount right)))
@@ -1565,8 +1570,8 @@ If it is greater, this operation has no effect."
 (defmethod subtract* ((left balance) (right amount))
   (unless (value-zerop* right)
     (let* ((amounts-map (get-amounts-map left))
-	   (found-entry (assoc (amount-commodity right)
-			       amounts-map))
+	   (found-entry (assoc (amount-commodity right) amounts-map
+			       :test #'commodity-equal))
 	   (current-amount (cdr found-entry)))
       (if current-amount
 	  (progn
@@ -1951,7 +1956,10 @@ If it is greater, this operation has no effect."
 			     :omit-commodity-p omit-commodity-p
 			     :full-precision-p full-precision-p)
 		(setf first nil)))
-	  (get-amounts-map balance)))
+	  (get-amounts-map balance))
+    (if first
+	(print-value (integer-to-amount 0)
+		     :width width :output-stream output-stream)))
   (values))
 
 (defmethod format-value ((integer integer) &key
