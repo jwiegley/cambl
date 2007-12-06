@@ -914,6 +914,7 @@ associated with the given commodity pool.
   (declare (optimize (speed 3) (safety 0)))
   (apply #'balance (balance-amounts balance)))
 
+(declaim (inline shallow-copy-balance))
 (defun shallow-copy-balance (balance)
   (declare (type balance balance))
   (declare (optimize (speed 3) (safety 0)))
