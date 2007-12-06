@@ -261,7 +261,9 @@
 
 	   copy-amount
 	   copy-balance
+	   shallow-copy-balance
 	   copy-from-balance
+	   shallow-copy-from-balance
 	   copy-value
 
 	   value-zerop
@@ -345,6 +347,7 @@
 	   commodity-equal
 	   commodity-equalp
 	   commodity-lessp
+	   compare-amounts-visually
 
 	   annotated-commodity-p
 	   make-commodity-annotation
@@ -642,18 +645,16 @@ only used if the commodity's own THOUSAND-MARKS-P accessor returns T.")
 (defun amount (data &key (pool *default-commodity-pool*))
   (etypecase data
     (amount (copy-amount data))
-    (string
-     (read-amount (make-string-input-stream data)
-		  :observe-properties-p t :pool pool))
+    (string (read-amount (make-string-input-stream data)
+			 :observe-properties-p t :pool pool))
     (integer
      (integer-to-amount data))))
 
 (defun amount* (data &key (pool *default-commodity-pool*))
   (etypecase data
     (amount (copy-amount data))
-    (string
-     (read-amount (make-string-input-stream data)
-		  :observe-properties-p nil :pool pool))
+    (string (read-amount (make-string-input-stream data)
+			 :observe-properties-p nil :pool pool))
     (integer
      (integer-to-amount data))))
 
@@ -900,8 +901,8 @@ associated with the given commodity pool.
 
 ;;;_  + Copiers
 
-(defmethod copy-value ((amount integer))
-  amount)
+(defmethod copy-value ((integer integer))
+  integer)
 
 (defmethod copy-value ((amount amount))
   (copy-amount amount))
@@ -913,6 +914,11 @@ associated with the given commodity pool.
   (declare (optimize (speed 3) (safety 0)))
   (apply #'balance (balance-amounts balance)))
 
+(defun shallow-copy-balance (balance)
+  (declare (type balance balance))
+  (declare (optimize (speed 3) (safety 0)))
+  (make-balance :amounts-map (copy-alist (get-amounts-map balance))))
+
 (defun copy-from-balance (balance)
   (declare (type balance balance))
   (let ((count (balance-commodity-count balance)))
@@ -922,6 +928,16 @@ associated with the given commodity pool.
 	   (copy-amount (cdr (first (get-amounts-map balance)))))
 	  (t
 	   (copy-balance balance)))))
+
+(defun shallow-copy-from-balance (balance)
+  (declare (type balance balance))
+  (let ((count (balance-commodity-count balance)))
+    (cond ((= count 0)
+	   0)
+	  ((= count 1)
+	   (cdr (first (get-amounts-map balance))))
+	  (t
+	   (shallow-copy-balance balance)))))
 
 (defmethod copy-value ((balance balance))
   (copy-balance balance))
@@ -1465,8 +1481,10 @@ If it is greater, this operation has no effect."
 		  (get-amounts-map left))
 	    ;; This is where the commodities need to get resorted, since we
 	    ;; just pushed a new one on
-	    (setf (get-amounts-map left)
-		  (sort (get-amounts-map left) #'compare-amounts-visually))))))
+	    (when (> (length (get-amounts-map left)) 1)
+	      (setf (get-amounts-map left)
+		    (sort (get-amounts-map left) #'commodity-lessp
+			  :key #'car)))))))
   left)
 
 (defmethod add* ((left integer) (right balance))
@@ -1888,6 +1906,21 @@ If it is greater, this operation has no effect."
 	    (princ output output-stream)))))
   (values))
 
+(defmethod print-value ((integer integer) &key
+			(output-stream *standard-output*)
+			(omit-commodity-p nil)
+			(full-precision-p nil)
+			(width nil)
+			(latter-width nil)
+			(line-feed-string nil))
+  (declare (ignore latter-width))
+  (declare (ignore line-feed-string))
+  (print-value (integer-to-amount integer)
+	       :output-stream output-stream
+	       :omit-commodity-p omit-commodity-p
+	       :full-precision-p full-precision-p
+	       :width width))
+
 (defun compare-amounts-visually (left right)
   (declare (type (cons (or commodity null) amount) left))
   (declare (type (cons (or commodity null) amount) right))
@@ -1905,19 +1938,19 @@ If it is greater, this operation has no effect."
   (declare (type boolean omit-commodity-p))
   (declare (type boolean full-precision-p))
   (declare (type (or fixnum null) latter-width))
-  (let ((first t)
-	(amounts (get-amounts-map balance)))
-    (mapc #'(lambda (amount)
-	      (unless first
-		(princ line-feed-string output-stream))
-	      (print-value (cdr amount)
-			   :width (if (or first (null latter-width))
-				      width latter-width)
-			   :output-stream output-stream
-			   :omit-commodity-p omit-commodity-p
-			   :full-precision-p full-precision-p)
-	      (setf first nil))
-	  amounts))
+  (let ((first t))
+    (mapc #'(lambda (entry)
+	      (unless (value-zerop (cdr entry))
+		(unless first
+		  (princ line-feed-string output-stream))
+		(print-value (cdr entry)
+			     :width (if (or first (null latter-width))
+					width latter-width)
+			     :output-stream output-stream
+			     :omit-commodity-p omit-commodity-p
+			     :full-precision-p full-precision-p)
+		(setf first nil)))
+	  (get-amounts-map balance)))
   (values))
 
 (defmethod format-value ((integer integer) &key
