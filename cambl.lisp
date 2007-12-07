@@ -227,7 +227,7 @@
 
 ;;;_* Package
 
-;;; (declaim (optimize (safety 1) (speed 3) (space 0)))
+;; (declaim (optimize (safety 1) (speed 3) (space 0)))
 (declaim (optimize (debug 3) (safety 3) (speed 1) (space 0)))
 
 (defpackage :cambl
@@ -250,6 +250,7 @@
 	   balance
 	   balance-p
 	   amount-in-balance
+	   get-amounts-map
 
 	   value-zerop
 	   value-zerop*
@@ -498,7 +499,7 @@
 (defgeneric format-value (value &key omit-commodity-p full-precision-p
 				width latter-width line-feed-string))
 
-(defgeneric commodity-name (item))
+(defgeneric commodity-name (item &optional no-annotation))
 (defgeneric display-precision (item))
 
 (defgeneric market-value (any-item &optional fixed-time))
@@ -798,6 +799,7 @@ associated with the given commodity pool.
   ;; Although it may seem inefficient, this is the only way to generate the
   ;; correct value, considering that AMOUNTS may contain duplicated commodity
   ;; values, and the commodities may not be in correctly sorted order.
+  (assert (> (length amounts) 1))
   (reduce #'add amounts))
 
 (declaim (inline balance-commodities))
@@ -1164,138 +1166,14 @@ associated with the given commodity pool.
 		   :keep-precision-p (amount-keep-precision-p amount))
       amount))
 
-(defun apply-to-list (list predicate function &key (first-only nil)
-		      (skip-to-next t))
-  "Given an input LIST, replicate as much of its structure as possible.
-
-  For every member of the list where PREDICATE returns T, FUNCTION is called
-with the list whose CAR is that member; FUNCTION should return the list which
-will be substituted at that point (this makes it possible to remove, change or
-insert the matched cell).  If FIRST-ONLY is NIL, this is only done for every
-cell that matches.  Note: Be very careful when setting FIRST-ONLY to T, for if
-FUNCTION returns a new list that also matches PREDICATE, an infinitely
-recursive loop can occur.  If SKIP-TO-NEXT is T, scanning the function
-contains with the CDR of the value returned by FUNCTION, which can never lead
-to infinite recursion.
-
-  Here are the required functions relating to the three canonical uses of
-APPLY-TO-LIST:
-
-  1. Modify an existing element: #'(lambda (list) (cons new-cons (cdr list)))
-  2. Remove an existing element: #'(lambda (list) (cdr list))
-  3. Add a new element:          #'(lambda (list) (cons new-cons list))
-
-Note: When removing elements, SKIP-TO-NEXT must be set to false, otherwise
-matching elements might be missed.  For modifying and adding elements,
-SKIP-TO-NEXT is likely to always be T (the default).
-
-  Now, every cons cell from the original list, after the last matching member,
-is shared entirely.  This is quite different from COPY-LIST, which creates new
-cons cells for every position -- even those that do not require a unique
-structure.  For example, consider the following list:
-
-  (defparameter *alist* '((a . 1) (b . 2) (e . 3) (f . 6) (g . 7)))
-
-  The idea is to return another version of this immutable list, while sharing
-as much structure as possible -- because the return value is also considered
-immutable.  The following function call achieves this, using the Modify
-pattern from above:
-
-  (apply-to-list *alist* #'(lambda (member) (eq 'e (car member)))
-                         #'(lambda (list) (cons (cons (caar list) 5)
-                                           (cdr list))))
-    => '((a . 1) (b . 2) (e . 5) (f . 6) (g . 7))
-
-  In the returned list, 15 atoms are shared with the original, while one new
-cons cell and one new atom are created:
-
-  1, 2, 3:         (a . 1)
-  4, 5, 6:         (b . 2)
-  7:               e
-  8, 9, 10 11:     ((f . 6) ...)
-  12, 13, 14, 15:  ((g . 7))
-
-  The usual practice of calling COPY-LIST and changing the incorrect element
-would have result in sharing only 13 atoms.  That code might have looked like
-this:
-
-  (let ((new-list (copy-list *alist*)))
-    (setf (cdar (member-if #'(lambda (cell)
-                           (eq 'e (car cell))) new-list)) 5)
-    new-list)
-
-APPLY-TO-LIST in this case is not only more efficient, but the call is more
-straightforward as well.  Further, while a discrepancy of 2 cons cells may not
-seem like much in this example, the difference increases by one for every cell
-beyond the cell that matches.  Thus, if the input list had contained 100 cells
-beyond (e . 3), the difference would have been 102 cells, and not merely 2.
-
-  Finally, in our example exactly 4 new cons cells and 1 new atom were created
-as a result of the call:
-
-  1: ((a . 1) ...)
-  2: ((b . 2) ...)
-  3: ((e . 5) ...)
-  4: (e . 5)
-  5: 5
-
-  This is the minimum amount of new information required to represent a new
-structure where the only change is that 'e' is paired with 5 instead of 3.
-
-  The idea of APPLY-TO-LIST is to support efficient functional programming,
-whereat immutable outputs are derived from immutable inputs by efficiently
-sharing as much structure as possible -- resulting in the least new memory
-allocated.  In cases where no references are held, this offers little gain
-over advanced generational garbage collection (such as lists passed within a
-recursive function); but where the results are held over the longer term, such
-as a series of computed values stored in a results list, the savings of this
-function can become substantial.  It was exactly this kind of sitation that
-motivated APPLY-TO-LIST: it made it possible to reduce overall memory
-consumption by a factor of 20, without introducing any additional complexity
-into the calling code."
-  (declare (type list list))
-  (declare (type function predicate))
-  (declare (type function function))
-  (declare (type boolean first-only))
-  (declare (optimize (speed 3) (safety 0)))
-  (let ((new-list list) last-cell)
-    (loop while list do
-       ;; Scan ahead to see if it's even worth copying structure; if we find a
-       ;; match, we must copy cells (like copy-list) until we reach the match.
-       ;; If there is no match, no copying is needed and the rest can be
-       ;; shared just as it is.
-	 (let ((next-match (member-if predicate list)))
-	   (unless next-match (return))
-	   (loop while (and list (not (eq next-match (car list)))) do
-		(setf last-cell (if last-cell
-				    (setf (cdr last-cell) (list (car list)))
-				    (setf new-list (list (car list))))
-		      list (cdr list)))
-	   (unless list (return))
-	   (if first-only
-	       (if last-cell
-		   (progn
-		     (setf (cdr last-cell) (funcall function list))
-		     (return))
-		   (return-from apply-to-list
-		     (funcall function list)))
-	       (let ((remainder (funcall function list)))
-		 (assert (or skip-to-next
-			     (not (eq (cdr remainder) (cdr list)))))
-		 (setf last-cell (if last-cell
-				     (setf (cdr last-cell) remainder)
-				     (setf new-list remainder))
-		       list (if skip-to-next (cdr remainder)
-				remainder))))))
-    new-list))
-
-(defun transform-balance (balance predicate function &key (first-only t)
-			  (skip-to-next nil))
-  (make-balance :amounts-map
-		(apply-to-list (get-amounts-map balance)
-			       predicate function
-			       :first-only first-only
-			       :skip-to-next skip-to-next)))
+(defmacro transform-balance (balance predicate function &key (first-only nil)
+			     (skip-to-next t) (lookahead nil))
+  `(make-balance :amounts-map
+		 (fprog:apply-to-list (get-amounts-map ,balance)
+				      ,predicate ,function
+				      :first-only ,first-only
+				      :skip-to-next ,skip-to-next
+				      :lookahead ,lookahead)))
 
 (defmethod value-abs ((balance balance))
   (transform-balance balance
@@ -1303,8 +1181,7 @@ into the calling code."
 		     #'(lambda (list)
 			 (cons (cons (caar list)
 				     (value-abs (cdar list)))
-			       (cdr list)))
-		     :first-only nil :skip-to-next t))
+			       (cdr list)))))
 
 (defun value-round (amount &optional precision)
   "Round the given AMOUNT to the stated PRECISION.
@@ -1391,8 +1268,7 @@ If it is greater, this operation has no effect."
 	    (make-amount
 	     :commodity (amount-commodity left)
 	     :quantity  new-value
-	     :keep-precision-p (or (amount-keep-precision-p left)
-				   (amount-keep-precision-p right)))))
+	     :keep-precision-p (amount-keep-precision-p left))))
       (let ((left-cell (cons (amount-commodity left) left))
 	    (right-cell (cons (amount-commodity right)
 			      (if adjustor
@@ -1412,7 +1288,7 @@ If it is greater, this operation has no effect."
 
 (defun apply-to-balance (balance commodity value function &optional adjustor)
   (let ((amounts-map
-	 (apply-to-list
+	 (fprog:apply-to-list
 	  (get-amounts-map balance)
 	  #'(lambda (cell)
 	      (or (commodity-equal (car cell) commodity)
@@ -1422,19 +1298,20 @@ If it is greater, this operation has no effect."
 		(if (commodity-equal (caar list) commodity)
 		    (if (value-zerop* new-value)
 			(cdr list)
-			(cons (cons (caar list) new-value) (cdr list)))
-		    (cons (cons (car list)
+			(cons (cons commodity new-value) (cdr list)))
+		    (cons (cons commodity
 				(if adjustor
 				    (funcall adjustor value)
 				    value))
-			  list)))))))
+			  list))))
+	  :first-only t :lookahead t)))
     (if (eq amounts-map (get-amounts-map balance))
 	(make-balance :amounts-map
-		      (nconc (copy-list (get-amounts-map balance))
-			     (list (cons commodity
-					 (if adjustor
-					     (funcall adjustor value)
-					     value)))))
+		      (append (get-amounts-map balance)
+			      (list (cons commodity
+					  (if adjustor
+					      (funcall adjustor value)
+					      value)))))
 	;; If the result of the subtraction is a balance of one commodity,
 	;; return it as a single amount.
 	(if (= 1 (length amounts-map))
@@ -1564,8 +1441,7 @@ If it is greater, this operation has no effect."
   (make-amount
    :commodity (amount-commodity left)
    :quantity (* (amount-quantity left) (amount-quantity right))
-   :keep-precision-p (or (amount-keep-precision-p left)
-			 (amount-keep-precision-p right))))
+   :keep-precision-p (amount-keep-precision-p left)))
 
 (defun multiply-in-balance (balance commodity value)
   (transform-balance balance
@@ -1573,7 +1449,8 @@ If it is greater, this operation has no effect."
 		     #'(lambda (list)
 			 (cons (cons (caar list)
 				     (multiply (cdar list) value))
-			       (cdr list)))))
+			       (cdr list)))
+		     :first-only t))
 
 (defmethod multiply ((left balance) (right rational))
   (if (zerop right)
@@ -1603,8 +1480,7 @@ If it is greater, this operation has no effect."
   (make-amount
    :commodity (amount-commodity left)
    :quantity (/ (amount-quantity left) (amount-quantity right))
-   :keep-precision-p (or (amount-keep-precision-p left)
-			 (amount-keep-precision-p right))))
+   :keep-precision-p (amount-keep-precision-p left)))
 
 (defun divide-in-balance (balance commodity value)
   (transform-balance balance
@@ -1612,7 +1488,8 @@ If it is greater, this operation has no effect."
 		     #'(lambda (list)
 			 (cons (cons (caar list)
 				     (divide (cdar list) value))
-			       (cdr list)))))
+			       (cdr list)))
+		     :first-only t))
 
 (defmethod divide ((left balance) (right rational))
   (divide-in-balance left nil right))
@@ -1632,7 +1509,7 @@ If it is greater, this operation has no effect."
 
     (when (and commodity-symbol
 	       (commodity-symbol-prefixed-p commodity-symbol))
-      (princ (commodity-name commodity) output-stream)
+      (princ (commodity-name commodity t) output-stream)
       (maybe-gap))
 
     (multiple-value-bind (quotient remainder)
@@ -1648,7 +1525,7 @@ If it is greater, this operation has no effect."
     (when (and commodity-symbol
 	       (not (commodity-symbol-prefixed-p commodity-symbol)))
       (maybe-gap)
-      (princ (commodity-name commodity) output-stream)))
+      (princ (commodity-name commodity t) output-stream)))
 
   (if (annotated-commodity-p commodity)
       (format-commodity-annotation (commodity-annotation commodity)
@@ -1681,12 +1558,11 @@ If it is greater, this operation has no effect."
   (declare (optimize (speed 3) (safety 0)))
 
   (let* ((commodity (amount-commodity amount))
-	 (omit-commodity-p (or omit-commodity-p (null commodity)))
-	 (commodity-symbol (and (not omit-commodity-p) commodity
+	 (commodity-symbol (and (not omit-commodity-p)
 				(commodity-symbol commodity)))
 	 (display-precision
 	  (the fixnum
-	    (unless (or (null commodity) full-precision-p
+	    (unless (or full-precision-p
 			(amount-keep-precision-p amount))
 	      (display-precision commodity)))))
     (if width
@@ -1843,18 +1719,22 @@ the stream stops and the invalid character is put back."
 ;; The commodity and annotated-commodity classes are the main interface class
 ;; for dealing with commodities themselves (which most people will never do).
 
-(defmethod commodity-name ((null null)) "")
+(defmethod commodity-name ((null null) &optional no-annotation)
+  (declare (ignore null no-annotation))
+  "")
 
-(defmethod commodity-name ((commodity commodity))
+(defmethod commodity-name ((commodity commodity) &optional no-annotation)
   (if (slot-boundp commodity 'qualified-name)
-      (commodity-qualified-name commodity)
+      (if (and no-annotation (annotated-commodity-p commodity))
+	  (commodity-name (get-referent commodity))
+	  (commodity-qualified-name commodity))
       (let ((symbol (commodity-symbol commodity)))
 	(if symbol
 	    (commodity-symbol-name symbol)
 	    ""))))
 
-(defmethod commodity-name ((amount amount))
-  (commodity-name (amount-commodity amount)))
+(defmethod commodity-name ((amount amount) &optional no-annotation)
+  (commodity-name (amount-commodity amount) no-annotation))
 
 (defmethod display-precision ((commodity commodity))
   (get-display-precision commodity))
@@ -2356,13 +2236,9 @@ from the string, for example:
 
 (defmethod strip-annotations ((commodity commodity)
 			      &key keep-price keep-date keep-tag)
-  (declare (type boolean keep-price))
-  (declare (type boolean keep-date))
-  (declare (type boolean keep-tag))
   (declare (ignore keep-price))
   (declare (ignore keep-date))
   (declare (ignore keep-tag))
-  (assert (not (annotated-commodity-p commodity)))
   commodity)
 
 (defmethod strip-annotations ((annotated-commodity annotated-commodity)
@@ -2370,29 +2246,39 @@ from the string, for example:
   (declare (type boolean keep-price))
   (declare (type boolean keep-date))
   (declare (type boolean keep-tag))
-  (assert (annotated-commodity-p annotated-commodity))
   (let* ((annotation (commodity-annotation annotated-commodity))
 	 (price (annotation-price annotation))
 	 (date (annotation-date annotation))
 	 (tag (annotation-tag annotation)))
-    (if (and (or keep-price (null price))
-	     (or keep-date (null date))
-	     (or keep-tag (null tag)))
-	annotated-commodity
-	(let ((tmp (make-instance 'annotated-commodity)))
-	  (setf (get-referent tmp)
-		(get-referent annotated-commodity))
-	  (let ((new-ann (make-commodity-annotation)))
-	    (setf (get-commodity-annotation tmp) new-ann)
-	    (if keep-price
-		(setf (annotation-price new-ann) price))
-	    (if keep-date
-		(setf (annotation-date new-ann) date))
-	    (if keep-tag
-		(setf (annotation-tag new-ann) tag)))
-	  (if (commodity-annotation-empty-p tmp)
-	      (get-referent tmp)
-	      tmp)))))
+    (cond
+      ((and (not keep-price)
+	    (not keep-date)
+	    (not keep-tag))
+       (get-referent annotated-commodity))
+      ((and (or keep-price (null price))
+	    (or keep-date (null date))
+	    (or keep-tag (null tag)))
+       annotated-commodity)
+      (t
+       (let ((annotation (make-commodity-annotation)))
+	 (if keep-price
+	     (setf (annotation-price annotation) price))
+	 (if keep-date
+	     (setf (annotation-date annotation) date))
+	 (if keep-tag
+	     (setf (annotation-tag annotation) tag))
+	 (if (commodity-annotation-empty-p annotation)
+	     (get-referent annotation)
+	     (make-instance 'annotated-commodity
+			    :referent (get-referent annotated-commodity)
+			    :annotation annotation)))))))
+
+(defmethod strip-annotations ((rational rational)
+			      &key keep-price keep-date keep-tag)
+  (declare (ignore keep-price))
+  (declare (ignore keep-date))
+  (declare (ignore keep-tag))
+  rational)
 
 (defmethod strip-annotations ((amount amount)
 			      &key keep-price keep-date keep-tag)
@@ -2402,18 +2288,15 @@ from the string, for example:
   (if (and keep-price keep-date keep-tag)
       amount
       (let ((commodity (amount-commodity amount)))
-	(if (or (null commodity)
-		(not (annotated-commodity-p commodity))
-		(and keep-price keep-date keep-tag))
-	    amount
+	(if (annotated-commodity-p commodity)
 	    (make-amount :commodity
 			 (strip-annotations commodity
 					    :keep-price keep-price
 					    :keep-date keep-date
 					    :keep-tag keep-tag)
 			 :quantity (amount-quantity amount)
-			 :keep-precision-p
-			 (amount-keep-precision-p amount))))))
+			 :keep-precision-p (amount-keep-precision-p amount))
+	    amount))))
 
 (defmethod strip-annotations ((balance balance)
 			      &key keep-price keep-date keep-tag)

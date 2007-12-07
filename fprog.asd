@@ -31,21 +31,18 @@
 
 (in-package :cl-user)
 
-(defpackage :cambl-asd
+(defpackage :fprog-asd
   (:use :cl :asdf))
 
-(in-package :cambl-asd)
+(in-package :fprog-asd)
 
-(defvar *cambl-version* "4.0.0-pre-0"
-  "A string denoting the current version of CAMBL.  Used
+(defvar *fprog-version* "1.0.0"
+  "A string denoting the current version of FPROG.  Used
 for diagnostic output.")
 
-(export '*cambl-version*)
+(export '*fprog-version*)
 
-(pushnew :periods-use-parser *features*)
-
-(asdf:defsystem :cambl
+(asdf:defsystem :fprog
   :serial t
-  :version #.*cambl-version*
-  :depends-on (:red-black :local-time :periods :fprog)
-  :components ((:file "cambl")))
+  :version #.*fprog-version*
+  :components ((:file "fprog")))
