@@ -1164,8 +1164,8 @@ associated with the given commodity pool.
 		   :keep-precision-p (amount-keep-precision-p amount))
       amount))
 
-(defun apply-to-list (list predicate function &key (first-only t)
-		      (skip-to-next nil))
+(defun apply-to-list (list predicate function &key (first-only nil)
+		      (skip-to-next t))
   "Given an input LIST, replicate as much of its structure as possible.
 
   For every member of the list where PREDICATE returns T, FUNCTION is called
@@ -1178,14 +1178,28 @@ recursive loop can occur.  If SKIP-TO-NEXT is T, scanning the function
 contains with the CDR of the value returned by FUNCTION, which can never lead
 to infinite recursion.
 
-  Every cons cell in the list after the last matching member will be shared
-entirely.  For example, consider the following list:
+  Here are the required functions relating to the three canonical uses of
+APPLY-TO-LIST:
+
+  1. Modify an existing element: #'(lambda (list) (cons new-cons (cdr list)))
+  2. Remove an existing element: #'(lambda (list) (cdr list))
+  3. Add a new element:          #'(lambda (list) (cons new-cons list))
+
+Note: When removing elements, SKIP-TO-NEXT must be set to false, otherwise
+matching elements might be missed.  For modifying and adding elements,
+SKIP-TO-NEXT is likely to always be T (the default).
+
+  Now, every cons cell from the original list, after the last matching member,
+is shared entirely.  This is quite different from COPY-LIST, which creates new
+cons cells for every position -- even those that do not require a unique
+structure.  For example, consider the following list:
 
   (defparameter *alist* '((a . 1) (b . 2) (e . 3) (f . 6) (g . 7)))
 
-  The idea is to return a corrected version of this immutable list, while
-sharing as much structure as possible (because the return value is also
-considered immutable).  The following call achieves this:
+  The idea is to return another version of this immutable list, while sharing
+as much structure as possible -- because the return value is also considered
+immutable.  The following function call achieves this, using the Modify
+pattern from above:
 
   (apply-to-list *alist* #'(lambda (member) (eq 'e (car member)))
                          #'(lambda (list) (cons (cons (caar list) 5)
@@ -1193,32 +1207,31 @@ considered immutable).  The following call achieves this:
     => '((a . 1) (b . 2) (e . 5) (f . 6) (g . 7))
 
   In the returned list, 15 atoms are shared with the original, while one new
-cons cell and atom are created:
+cons cell and one new atom are created:
 
-         1, 2, 3:  (a . 1)
-         4, 5, 6:  (b . 2)
-               7:  e
-     8, 9, 10 11:  ((f . 6) ...)
+  1, 2, 3:         (a . 1)
+  4, 5, 6:         (b . 2)
+  7:               e
+  8, 9, 10 11:     ((f . 6) ...)
   12, 13, 14, 15:  ((g . 7))
 
-The usual practice of calling COPY-LIST and changing the incorrect element
+  The usual practice of calling COPY-LIST and changing the incorrect element
 would have result in sharing only 13 atoms.  That code might have looked like
 this:
 
-  (let* ((new-list (copy-list *alist*))
-         (cell-to-replace
-          (member-if #'(lambda (cell) (eq 'e (car cell))) new-list)))
-    (setf (cdar cell-to-replace) 5)
+  (let ((new-list (copy-list *alist*)))
+    (setf (cdar (member-if #'(lambda (cell)
+                           (eq 'e (car cell))) new-list)) 5)
     new-list)
 
-As you can see, APPLY-TO-LIST is not only more efficient, but much
-more compact as well.  Further, while a discrepancy of 2 cons cells may not
-seem like much, the difference increases by one for every cell after the cell
-that matched.  Thus, if the input list had contained 100 cells beyond (e . 3),
-the difference would have been 102 cells shared, and not just 2.
+APPLY-TO-LIST in this case is not only more efficient, but the call is more
+straightforward as well.  Further, while a discrepancy of 2 cons cells may not
+seem like much in this example, the difference increases by one for every cell
+beyond the cell that matches.  Thus, if the input list had contained 100 cells
+beyond (e . 3), the difference would have been 102 cells, and not merely 2.
 
-  In the code above, exactly 4 new cons cells and 1 new atom were created as a
-result of the call:
+  Finally, in our example exactly 4 new cons cells and 1 new atom were created
+as a result of the call:
 
   1: ((a . 1) ...)
   2: ((b . 2) ...)
@@ -1226,52 +1239,55 @@ result of the call:
   4: (e . 5)
   5: 5
 
-  This is the minimum amount of new information required to represent the new
-structure.  The idea of this function is to support efficient functional
-programming, wherein immutable outputs are derived from immutable inputs
-efficiently by sharing as much structure as possible, resulting in the least
-new memory allocated.  In cases where no references are held, this offers
-little gain for advanced generational garbage collectors (such as input to
-succesive iterations of a recursive function); but where the results are kept
--- such as a series of computed values that are stored in a results list --
-the savings can reach combinatorial proportions.  (Just such a sitation
-motivated the creation of this function: memory consumption was reduced by a
-factor of 20 over roughly 10,000 elements)."
+  This is the minimum amount of new information required to represent a new
+structure where the only change is that 'e' is paired with 5 instead of 3.
+
+  The idea of APPLY-TO-LIST is to support efficient functional programming,
+whereat immutable outputs are derived from immutable inputs by efficiently
+sharing as much structure as possible -- resulting in the least new memory
+allocated.  In cases where no references are held, this offers little gain
+over advanced generational garbage collection (such as lists passed within a
+recursive function); but where the results are held over the longer term, such
+as a series of computed values stored in a results list, the savings of this
+function can become substantial.  It was exactly this kind of sitation that
+motivated APPLY-TO-LIST: it made it possible to reduce overall memory
+consumption by a factor of 20, without introducing any additional complexity
+into the calling code."
   (declare (type list list))
   (declare (type function predicate))
   (declare (type function function))
   (declare (type boolean first-only))
   (declare (optimize (speed 3) (safety 0)))
-  (let ((first-match (member-if predicate list)))
-    (if first-match
-	(let (new-list last-cell)
-	  (loop while (and list (not (eq list first-match))) do
-	       (setf last-cell
-		     (if last-cell
-			 (setf (cdr last-cell) (list (car list)))
-			 (setf new-list (list (car list))))
-		     list (cdr list)))
-	  (let ((remainder
-		 (if first-only
-		     (funcall function list)
-		     (let ((replacement (funcall function list)))
-		       (if skip-to-next
-			   (progn
-			     (setf (cdr replacement)
-				   (apply-to-list
-				    (cdr replacement) predicate function
-				    :first-only nil
-				    :skip-to-next skip-to-next))
-			     replacement)
-			   (apply-to-list
-			    replacement predicate function
-			    :first-only nil :skip-to-next skip-to-next))))))
-	    (if last-cell
-		(progn
-		  (setf (cdr last-cell) remainder)
-		  new-list)
-		remainder)))
-	list)))
+  (let ((new-list list) last-cell)
+    (loop while list do
+       ;; Scan ahead to see if it's even worth copying structure; if we find a
+       ;; match, we must copy cells (like copy-list) until we reach the match.
+       ;; If there is no match, no copying is needed and the rest can be
+       ;; shared just as it is.
+	 (let ((next-match (member-if predicate list)))
+	   (unless next-match (return))
+	   (loop while (and list (not (eq next-match (car list)))) do
+		(setf last-cell (if last-cell
+				    (setf (cdr last-cell) (list (car list)))
+				    (setf new-list (list (car list))))
+		      list (cdr list)))
+	   (unless list (return))
+	   (if first-only
+	       (if last-cell
+		   (progn
+		     (setf (cdr last-cell) (funcall function list))
+		     (return))
+		   (return-from apply-to-list
+		     (funcall function list)))
+	       (let ((remainder (funcall function list)))
+		 (assert (or skip-to-next
+			     (not (eq (cdr remainder) (cdr list)))))
+		 (setf last-cell (if last-cell
+				     (setf (cdr last-cell) remainder)
+				     (setf new-list remainder))
+		       list (if skip-to-next (cdr remainder)
+				remainder))))))
+    new-list))
 
 (defun transform-balance (balance predicate function &key (first-only t)
 			  (skip-to-next nil))
