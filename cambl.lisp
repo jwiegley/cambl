@@ -102,10 +102,6 @@
 ;;   amount-precision   ; return the internal precision of an amount
 ;;   display-precision  ; return the "display" precision for an amount
 ;;                      ; or a commodity
-;;
-;;   *european-style*   ; set this to T if you want to see 1.000,00 style
-;;                      ; numbers printed instead of 1,000.00 (US) style.
-;;                      ; This also influences how amounts are parsed.
 
 ;;;_ * Example Session
 
@@ -231,40 +227,29 @@
 
 ;;;_* Package
 
-(declaim (optimize (safety 1) (speed 3) (space 0)))
+;;; (declaim (optimize (safety 1) (speed 3) (space 0)))
+(declaim (optimize (debug 3) (safety 3) (speed 1) (space 0)))
 
 (defpackage :cambl
   (:use :cl :red-black :local-time :periods)
-  (:export *european-style*
-	   pushend
+  (:export pushend
 
 	   value
 	   valuep
 	   amount
 	   amount-p
 	   amount*
-	   amount-sans-commodity
 	   parse-amount
 	   parse-amount*
 	   exact-amount
 	   read-amount
 	   read-amount*
 	   read-exact-amount
-	   float-to-amount
-	   integer-to-amount
 	   amount-quantity
 
 	   balance
 	   balance-p
-	   get-amounts-map
 	   amount-in-balance
-
-	   copy-amount
-	   copy-balance
-	   shallow-copy-balance
-	   copy-from-balance
-	   shallow-copy-from-balance
-	   copy-value
 
 	   value-zerop
 	   value-zerop*
@@ -303,25 +288,16 @@
 	   value>=
 
 	   value-abs
+	   value-maybe-round
 	   value-round
-	   value-round*
-
-	   negate*
 	   negate
 	   add
-	   add*
 	   subtract
-	   subtract*
 	   multiply
-	   multiply*
 	   divide
-	   divide*
 
-	   optimize-value
-	   value-amount
 	   print-value
 	   format-value
-	   quantity-string
 
 	   exchange-commodity
 	   purchase-commodity
@@ -360,8 +336,8 @@
 	   annotated-commodity
 	   strip-annotations
 
-	   commodity-pool
 	   *default-commodity-pool*
+	   commodity-pool
 	   make-commodity-pool
 	   reset-commodity-pool
 	   find-commodity
@@ -372,13 +348,6 @@
 (in-package :cambl)
 
 ;;;_* Types
-
-(deftype value ()
-  '(or integer amount balance))
-
-(declaim (inline valuep))
-(defun valuep (object)
-  (typep object 'value))
 
 ;;;_ - COMMODITY-SYMBOL
 
@@ -394,7 +363,7 @@
   (by-name-map (make-hash-table :test 'equal) :type hash-table)
   (default-commodity nil))
 
-(defparameter *default-commodity-pool* (make-commodity-pool))
+(defvar *default-commodity-pool* (make-commodity-pool))
 
 ;;;_ + COMMODITY
 
@@ -478,8 +447,7 @@
 
 (defstruct (amount (:print-function print-amount))
   (commodity nil :type (or commodity null))
-  (quantity 0 :type integer)
-  (precision 0 :type fixnum)
+  (quantity 0 :type rational)
   (keep-precision-p nil :type boolean))
 
 ;;;_ + BALANCE
@@ -488,18 +456,18 @@
 		    (:print-function print-balance))
   (amounts-map nil))
 
+;;;_ + VALUE
+
+(deftype value ()
+  '(or rational amount balance))
+
+(declaim (inline valuep))
+(defun valuep (object)
+  (typep object 'value))
+
 ;;;_* Generics
 
 ;;;_ + Public generics
-
-;; - If the argument says item, this means:
-;;   amount, commodity, annotated-commodity, null
-;; - If the argument says any-item, this means:
-;;   amount, balance, commodity, annotated-commodity, null
-;; - If it says value, this means:
-;;   amount, balance
-
-(defgeneric copy-value (value))
 
 (defgeneric value-zerop (value))
 (defgeneric value-zerop* (value))	; is it *really* zerop?
@@ -518,23 +486,15 @@
 (defgeneric value/= (left right))
 
 (defgeneric value-abs (value))
-
-(defgeneric negate* (value))
 (defgeneric negate (value))
 (defgeneric add (value-a value-b))
-(defgeneric add* (value-a value-b))
 (defgeneric subtract (value-a value-b))
-(defgeneric subtract* (value-a value-b))
 (defgeneric multiply (value-a value-b))
-(defgeneric multiply* (value-a value-b))
 (defgeneric divide (value-a value-b))
-(defgeneric divide* (value-a value-b))
-
-(defgeneric optimize-value (value))
-(defgeneric value-amount (value))
 
 (defgeneric print-value (value &key output-stream omit-commodity-p
-			       full-precision-p width latter-width line-feed-string))
+			       full-precision-p width latter-width
+			       line-feed-string))
 (defgeneric format-value (value &key omit-commodity-p full-precision-p
 				width latter-width line-feed-string))
 
@@ -555,21 +515,20 @@
 ;;;_* Object printing functions
 
 (defun print-amount (amount stream depth)
-  (declare (ignore depth))
   (print-unreadable-object (amount stream :type t)
-    (format stream "~S :KEEP-PRECISION-P ~S"
-	    (format-value amount :full-precision-p t)
+    (print-object (amount-commodity amount) stream)
+    (format stream "~&~vA~S :KEEP-PRECISION-P ~S"
+	    depth " " (amount-quantity amount)
 	    (amount-keep-precision-p amount))))
 
 (defun print-balance (balance stream depth)
   (declare (ignore depth))
   (print-unreadable-object (balance stream :type t)
-    (if (get-amounts-map balance)
-	(mapc #'(lambda (entry)
-		  (terpri stream)
-		  (princ "     " stream)
-		  (princ (cdr entry) stream))
-	      (get-amounts-map balance)))))
+    (mapc #'(lambda (entry)
+	      (terpri stream)
+	      (princ "     " stream)
+	      (princ (cdr entry) stream))
+	  (get-amounts-map balance))))
 
 ;;;_* Constants
 
@@ -597,16 +556,6 @@
   0-9 . , ; - + * / ^ ? : & | ! = \"
   < > { } [ ] ( ) @")
 
-;;;_* Global Variables
-
-(defvar *european-style* nil
-  "If set to T, amounts will be printed as 1.000,00.
-The default is US style, which is 1,000.00.  Note that thousand markers are
-only used if the commodity's own THOUSAND-MARKS-P accessor returns T.")
-
-(defvar *extra-precision* 6
-  "Specify the amount of \"extra\" to be added during amount division.")
-
 ;;;_* Functions
 
 ;;;_ * COMMODITY
@@ -633,7 +582,6 @@ only used if the commodity's own THOUSAND-MARKS-P accessor returns T.")
 
 ;;;_  + Error class
 
-;; jww (2007-12-05): return the value operands relating to the error
 (define-condition amount-error (error) 
   ((description :reader error-description :initarg :msg :type string)
    (operands :reader error-operands :initarg :operands :type list))
@@ -642,21 +590,15 @@ only used if the commodity's own THOUSAND-MARKS-P accessor returns T.")
 
 ;;;_  + Create AMOUNT objects from strings
 
-(defun amount (data &key (pool *default-commodity-pool*))
-  (etypecase data
-    (amount (copy-amount data))
-    (string (read-amount (make-string-input-stream data)
-			 :observe-properties-p t :pool pool))
-    (integer
-     (integer-to-amount data))))
+(defun amount (string &key (pool *default-commodity-pool*))
+  (declare (type string string))
+  (read-amount (make-string-input-stream string)
+	       :observe-properties-p t :pool pool))
 
-(defun amount* (data &key (pool *default-commodity-pool*))
-  (etypecase data
-    (amount (copy-amount data))
-    (string (read-amount (make-string-input-stream data)
-			 :observe-properties-p nil :pool pool))
-    (integer
-     (integer-to-amount data))))
+(defun amount* (string &key (pool *default-commodity-pool*))
+  (declare (type string string))
+  (read-amount (make-string-input-stream string)
+	       :observe-properties-p nil :pool pool))
 
 (declaim (inline parse-amount))
 (defun parse-amount (&rest args)
@@ -667,8 +609,9 @@ only used if the commodity's own THOUSAND-MARKS-P accessor returns T.")
   (apply #'amount args))
 
 (declaim (inline exact-amount))
-(defun exact-amount (text &key (pool *default-commodity-pool*))
-  (let ((amount (amount* text :pool pool)))
+(defun exact-amount (string &key (pool *default-commodity-pool*))
+  (declare (type string string))
+  (let ((amount (amount* string :pool pool)))
     (setf (amount-keep-precision-p amount) t)
     amount))
 
@@ -730,7 +673,7 @@ associated with the given commodity pool.
   (declare (optimize (speed 3) (safety 0)))
 
   (let ((connected-p t) (prefixed-p t)
-	symbol quantity details amount
+	symbol quantity details
 	negative-p thousand-marks-p)
 
     (when (char= #\- (peek-char-in-line in t))
@@ -781,107 +724,81 @@ associated with the given commodity pool.
 		(find-commodity symbol :pool pool :create-if-not-exists-p t))
 	    (values nil nil))
 
-      ;; Determine the precision of the amount, based on the usage of
-      ;; comma or period.
-      (setf amount (make-amount :commodity commodity))
+      (let* ((last-comma
+	      (locally #+sbcl (declare (sb-ext:muffle-conditions
+					sb-ext:compiler-note))
+		       (position #\, quantity :from-end t)))
+	     (last-period
+	      (locally #+sbcl (declare (sb-ext:muffle-conditions
+					sb-ext:compiler-note))
+		       (position #\. quantity :from-end t)))
 
-      (let ((last-comma
-	     (locally #+sbcl (declare (sb-ext:muffle-conditions
-				       sb-ext:compiler-note))
-		      (position #\, quantity :from-end t)))
-	    (last-period
-	     (locally #+sbcl (declare (sb-ext:muffle-conditions
-				       sb-ext:compiler-note))
-		      (position #\. quantity :from-end t))))
-	(if (or (and *european-style* last-period)
-		(and (not *european-style*) last-comma))
-	    (setf thousand-marks-p t))
-	(cond ((and last-comma last-period)
-	       (setf (amount-precision amount)
-		     (- (length quantity) (if (> last-comma last-period)
-					      last-comma last-period) 1)))
-	      ((and last-comma *european-style*)
-	       (setf (amount-precision amount)
-		     (- (length quantity) last-comma 1)))
-	      ((and last-period (not *european-style*))
-	       (setf (amount-precision amount)
-		     (- (length quantity) last-period 1)))
-	      (t
-	       (setf (amount-precision amount) 0))))
+	     (precision (cond ((and last-comma last-period)
+			       (- (length quantity)
+				  (if (> last-comma last-period)
+				      last-comma last-period) 1))
+			      (last-period
+			       (- (length quantity) last-period 1))
+			      (t 0)))
+	     (denominator (the integer (expt 10 (the fixnum precision))))
+	     (quantity
+	      (/ (parse-integer (delete-if #'(lambda (c)
+					       (or (char= #\. c)
+						   (char= #\, c)))
+					   quantity))
+		 denominator)))
 
-      (setf (amount-quantity amount)
-	    (parse-integer (delete-if #'(lambda (c)
-					  (or (char= #\. c)
-					      (char= #\, c)))
-				      quantity)))
-      (if commodity
-	  (when (or newly-created-p observe-properties-p)
-	    (let ((base-commodity
-		   (if (annotated-commodity-p commodity)
-		       (get-referent commodity)
-		       commodity)))
-	      ;; Observe the commodity usage details we noticed while parsing
-	      (setf (commodity-symbol-prefixed-p
-		     (get-symbol base-commodity)) prefixed-p)
-	      (setf (commodity-symbol-connected-p
-		     (get-symbol base-commodity)) connected-p)
-	      (if thousand-marks-p
-		  (setf (get-thousand-marks-p base-commodity)
-			thousand-marks-p))
+	(if last-comma (setf thousand-marks-p t))
+	(if negative-p (setf quantity (- quantity)))
 
-	      (let ((precision (amount-precision amount)))
-		(if (> precision
-		       (the fixnum
-			 (get-display-precision base-commodity)))
-		    (setf (get-display-precision base-commodity)
-			  precision)))))
-	  ;; If the amount had no commodity at all, always preserve full
-	  ;; precision, as if the user had used `exact-amount'.
-	  (setf (amount-keep-precision-p amount) t)))
+	(if commodity
+	    (progn
+	      (when (or newly-created-p observe-properties-p)
+		(let ((base-commodity
+		       (if (annotated-commodity-p commodity)
+			   (get-referent commodity)
+			   commodity)))
+		  ;; Observe the commodity usage details we noticed while
+		  ;; parsing
+		  (setf (commodity-symbol-prefixed-p
+			 (get-symbol base-commodity)) prefixed-p)
+		  (setf (commodity-symbol-connected-p
+			 (get-symbol base-commodity)) connected-p)
+		  (if thousand-marks-p
+		      (setf (get-thousand-marks-p base-commodity)
+			    thousand-marks-p))
 
-    (if negative-p
-	(negate* amount))
+		  (if (> precision (the fixnum
+				     (get-display-precision base-commodity)))
+		      (setf (get-display-precision base-commodity)
+			    precision))))
 
-    (the amount amount)))
+	      (make-amount :commodity commodity :quantity quantity))
+
+	    ;; If the amount had no commodity at all, always preserve full
+	    ;; precision, as if the user had used `exact-amount'.
+	    quantity)))))
 
 (declaim (inline read-amount*))
 (defun read-amount* (in &key (pool *default-commodity-pool*))
+  (declare (type stream in))
   (read-amount in :observe-properties-p nil :pool pool))
 
 (declaim (inline read-exact-amount))
-(defun read-exact-amount (text &key (pool *default-commodity-pool*))
-  (let ((amount (read-amount* text :pool pool)))
+(defun read-exact-amount (in &key (pool *default-commodity-pool*))
+  (declare (type stream in))
+  (let ((amount (read-amount* in :pool pool)))
     (setf (amount-keep-precision-p amount) t)
     amount))
 
-;;;_  + Convert other values to and from AMOUNT
-
-(declaim (inline integer-to-amount))
-(defun integer-to-amount (value)
-  (make-amount :quantity value :precision 0))
-
-(defun amount-to-integer (amount &key (do-not-check t))
-  (declare (type amount amount))
-  (declare (type boolean do-not-check))
-  (declare (optimize (speed 3) (safety 0)))
-  (multiple-value-bind (quotient remainder)
-      (truncate (amount-quantity amount)
-		(the integer
-		  (expt (the fixnum 10) (amount-precision amount))))
-    (if (and (not do-not-check) remainder)
-	(error 'amount-error
-	       :msg "Conversion of amount to integer loses precision"
-	       :operations (list amount)))
-    quotient))
-
-;;;_  + Create BALANCE objects from other amounts
+;;;_  + BALANCE commodity details
 
 (declaim (inline balance))
 (defun balance (&rest amounts)
-  (declare (optimize (speed 3) (safety 0)))
-  (reduce #'add* amounts :initial-value (make-balance)))
-
-;;;_  + BALANCE commodity details
+  ;; Although it may seem inefficient, this is the only way to generate the
+  ;; correct value, considering that AMOUNTS may contain duplicated commodity
+  ;; values, and the commodities may not be in correctly sorted order.
+  (reduce #'add amounts))
 
 (declaim (inline balance-commodities))
 (defun balance-commodities (balance)
@@ -899,50 +816,6 @@ associated with the given commodity pool.
 (defun balance-commodity-count (balance)
   (length (get-amounts-map balance)))
 
-;;;_  + Copiers
-
-(defmethod copy-value ((integer integer))
-  integer)
-
-(defmethod copy-value ((amount amount))
-  (copy-amount amount))
-
-(declaim (inline copy-balance))
-(defun copy-balance (balance)
-  "Override the default COPY-BALANCE function with a deeper copy."
-  (declare (type balance balance))
-  (declare (optimize (speed 3) (safety 0)))
-  (apply #'balance (balance-amounts balance)))
-
-(declaim (inline shallow-copy-balance))
-(defun shallow-copy-balance (balance)
-  (declare (type balance balance))
-  (declare (optimize (speed 3) (safety 0)))
-  (make-balance :amounts-map (copy-alist (get-amounts-map balance))))
-
-(defun copy-from-balance (balance)
-  (declare (type balance balance))
-  (let ((count (balance-commodity-count balance)))
-    (cond ((= count 0)
-	   0)
-	  ((= count 1)
-	   (copy-amount (cdr (first (get-amounts-map balance)))))
-	  (t
-	   (copy-balance balance)))))
-
-(defun shallow-copy-from-balance (balance)
-  (declare (type balance balance))
-  (let ((count (balance-commodity-count balance)))
-    (cond ((= count 0)
-	   0)
-	  ((= count 1)
-	   (cdr (first (get-amounts-map balance))))
-	  (t
-	   (shallow-copy-balance balance)))))
-
-(defmethod copy-value ((balance balance))
-  (copy-balance balance))
-
 ;;;_  + Unary truth tests
 
 (declaim (inline value-maybe-round))
@@ -952,8 +825,8 @@ associated with the given commodity pool.
       amount
       (value-round amount)))
 
-(defmethod value-zerop ((integer integer))
-  (cl:zerop integer))
+(defmethod value-zerop ((rational rational))
+  (cl:zerop rational))
 (defmethod value-zerop ((amount amount))
   (cl:zerop (amount-quantity (value-maybe-round amount))))
 (defmethod value-zerop ((balance balance))
@@ -963,8 +836,8 @@ associated with the given commodity pool.
 	(get-amounts-map balance))
   t)
 
-(defmethod value-zerop* ((integer integer))
-  (cl:zerop integer))
+(defmethod value-zerop* ((rational rational))
+  (cl:zerop rational))
 (defmethod value-zerop* ((amount amount))
   (cl:zerop (amount-quantity amount)))
 (defmethod value-zerop* ((balance balance))
@@ -974,8 +847,8 @@ associated with the given commodity pool.
 	(get-amounts-map balance))
   t)
 
-(defmethod value-minusp ((integer integer))
-  (cl:minusp integer))
+(defmethod value-minusp ((rational rational))
+  (cl:minusp rational))
 (defmethod value-minusp ((amount amount))
   (cl:minusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-minusp ((balance balance))
@@ -985,8 +858,8 @@ associated with the given commodity pool.
 	(get-amounts-map balance))
   t)
 
-(defmethod value-minusp* ((integer integer))
-  (cl:minusp integer))
+(defmethod value-minusp* ((rational rational))
+  (cl:minusp rational))
 (defmethod value-minusp* ((amount amount))
   (cl:minusp (amount-quantity amount)))
 (defmethod value-minusp* ((balance balance))
@@ -996,8 +869,8 @@ associated with the given commodity pool.
 	(get-amounts-map balance))
   t)
 
-(defmethod value-plusp ((integer integer))
-  (cl:plusp integer))
+(defmethod value-plusp ((rational rational))
+  (cl:plusp rational))
 (defmethod value-plusp ((amount amount))
   (cl:plusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-plusp ((balance balance))
@@ -1007,8 +880,8 @@ associated with the given commodity pool.
 	(get-amounts-map balance))
   t)
 
-(defmethod value-plusp* ((integer integer))
-  (cl:plusp integer))
+(defmethod value-plusp* ((rational rational))
+  (cl:plusp rational))
 (defmethod value-plusp* ((amount amount))
   (cl:plusp (amount-quantity amount)))
 (defmethod value-plusp* ((balance balance))
@@ -1021,19 +894,11 @@ associated with the given commodity pool.
 (defun value-basic-truth (result zerop-test-func)
   (declare (type function zerop-test-func))
   (etypecase result
-    (amount
-     (not (funcall zerop-test-func result)))
-    (balance
-     (not (funcall zerop-test-func result)))
-    (integer
-     (not (zerop result)))
-    (string
-     (> (length result) 0))
-    (fixed-time
-     ;; jww (2007-11-11): NYI
-     nil)
-    (boolean
-     result)))
+    (amount (not (funcall zerop-test-func result)))
+    (balance (not (funcall zerop-test-func result)))
+    (rational (not (zerop result)))
+    (string (> (length result) 0))
+    (boolean result)))
 
 (declaim (inline value-truth value-truth*))
 (defun value-truth (result)
@@ -1060,87 +925,46 @@ associated with the given commodity pool.
 (defun verify-amounts (left right capitalized-gerund)
   (declare (type amount left))
   (declare (type amount right))
-  (let ((left-commodity (amount-commodity left))
-	(right-commodity (amount-commodity right)))
-    (unless (commodity-equal left-commodity right-commodity)
-      (error 'amount-error :msg
-	     (format nil "~A amounts with different commodities: ~A != ~A"
-		     capitalized-gerund
-		     (commodity-name left-commodity)
-		     (commodity-name right-commodity))))))
+  (unless (commodity-equal (amount-commodity left)
+			   (amount-commodity right))
+    (error 'amount-error :msg
+	   (format nil "~A amounts with different commodities: ~A != ~A"
+		   capitalized-gerund
+		   (commodity-name (amount-commodity left))
+		   (commodity-name (amount-commodity right))))))
 
-(defmethod compare ((left integer) (right integer))
+(defmethod compare ((left rational) (right rational))
   (- left right))
-(defmethod compare ((left amount) (right integer))
-  (compare* (value-maybe-round left) (integer-to-amount right)))
-(defmethod compare ((left integer) (right amount))
-  (compare* (integer-to-amount left) (value-maybe-round right)))
+(defmethod compare ((left amount) (right rational))
+  (- (amount-quantity (value-maybe-round left)) right))
+(defmethod compare ((left rational) (right amount))
+  (- left (amount-quantity (value-maybe-round right))))
 (defmethod compare ((left amount) (right amount))
   (verify-amounts left right "Comparing")
-  (compare* (value-maybe-round left) (value-maybe-round right)))
-(defmethod compare ((left balance) (right integer))
-  (compare (value-amount left) right))
-(defmethod compare ((left balance) (right amount))
-  (compare (value-amount left) right))
-(defmethod compare ((left integer) (right balance))
-  (compare left (value-amount right)))
-(defmethod compare ((left amount) (right balance))
-  (compare left (value-amount right)))
-(defmethod compare ((left balance) (right balance))
-  (compare (value-amount left) (value-amount right)))
+  (- (amount-quantity (value-maybe-round left))
+     (amount-quantity (value-maybe-round right))))
 
-(defmethod compare* ((left integer) (right integer))
+(defmethod compare* ((left rational) (right rational))
   (- left right))
-(defmethod compare* ((left amount) (right integer))
-  (compare* left (integer-to-amount right)))
-(defmethod compare* ((left integer) (right amount))
-  (compare* (integer-to-amount left) right))
-
-(declaim (inline resize-quantity))
-(defun resize-quantity (amount precision)
-  (declare (type fixnum precision))
-  (declare (optimize (speed 3) (safety 0)))
-  (locally #+sbcl (declare (sb-ext:muffle-conditions
-			    sb-ext:compiler-note))
-	   (* (amount-quantity amount)
-	      (the integer
-		(expt 10 (the fixnum
-			   (- precision
-			      (amount-precision amount))))))))
-
+(defmethod compare* ((left amount) (right rational))
+  (- (amount-quantity left) right))
+(defmethod compare* ((left rational) (right amount))
+  (- left (amount-quantity right)))
 (defmethod compare* ((left amount) (right amount))
   (verify-amounts left right "Exactly comparing")
-  (cond ((= (amount-precision left) (amount-precision right))
-	 (- (amount-quantity left) (amount-quantity right)))
-	((< (amount-precision left) (amount-precision right))
-	 (- (resize-quantity left (amount-precision right))
-	    (amount-quantity right)))
-	(t
-	 (- (amount-quantity left)
-	    (resize-quantity right (amount-precision left))))))
-
-(defmethod compare* ((left balance) (right integer))
-  (compare* (value-amount left) right))
-(defmethod compare* ((left balance) (right amount))
-  (compare* (value-amount left) right))
-(defmethod compare* ((left integer) (right balance))
-  (compare* left (value-amount right)))
-(defmethod compare* ((left amount) (right balance))
-  (compare* left (value-amount right)))
-(defmethod compare* ((left balance) (right balance))
-  (compare* (value-amount left) (value-amount right)))
+  (- (amount-quantity left) (amount-quantity right)))
 
 (declaim (inline sign))
 (defun sign (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
   (etypecase amount
-    (integer (sign* amount))
+    (rational (sign* amount))
     (amount (sign* (value-maybe-round amount)))))
 
 (defun sign* (amount)
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
   (etypecase amount
-    (integer
+    (rational
      (if (cl:minusp amount)
 	 -1
 	 (if (cl:plusp amount)
@@ -1156,147 +980,135 @@ associated with the given commodity pool.
 
 ;;;_  + Equality tests
 
-(defun amount-balance-equal (left right test-func)
-  "Compare with the amount LEFT equals the balance RIGHT."
-  (let ((amounts-map (get-amounts-map right)))
-    (if (value-zerop* left)
-	(or (null amounts-map)
-	    (cl:zerop (length amounts-map)))
-	(if (and amounts-map
-		 (= 1 (length amounts-map)))
-	    (let ((amount-value (cdr (assoc (amount-commodity left)
-					    amounts-map
-					    :test #'commodity-equal))))
-	      (if amount-value
-		  (funcall test-func amount-value left)))))))
-
 (defun balance-equal (left right test-func)
   (declare (type function test-func))
   (let ((left-amounts-map (get-amounts-map left))
 	(right-amounts-map (get-amounts-map right)))
-    (when (= (length left-amounts-map)
-	     (length right-amounts-map))
-      (mapc #'(lambda (entry)
-		(let ((right-value
-		       (cdr (assoc (car entry) right-amounts-map
-				   :test #'commodity-equal))))
-		  (unless right-value
-		    (return-from balance-equal))
-		  (unless (funcall test-func (cdr entry) right-value)
-		    (return-from balance-equal))))
-	    left-amounts-map)
-      t)))
+    (loop while (and left-amounts-map right-amounts-map
+		     (commodity-equal (caar left-amounts-map)
+				      (caar right-amounts-map))
+		     (funcall test-func (cdar left-amounts-map)
+			      (cdar right-amounts-map))) do
+	 (setf left-amounts-map (cdr left-amounts-map)
+	       right-amounts-map (cdr right-amounts-map)))
+    (and (null left-amounts-map)
+	 (null right-amounts-map))))
 
-(defmethod value-equal ((left integer) (right integer))
-  (equal left right))
-(defmethod value-equal ((left amount) (right integer))
-  (cl:zerop (compare* left right)))
-(defmethod value-equal ((left integer) (right amount))
-  (cl:zerop (compare* left right)))
+(defmethod value-equal ((left rational) (right rational))
+  (= left right))
+(defmethod value-equal ((left rational) (right amount))
+  nil)
+(defmethod value-equal ((left rational) (right balance))
+  nil)
+(defmethod value-equal ((left amount) (right rational))
+  nil)
 (defmethod value-equal ((left amount) (right amount))
-  (cl:zerop (compare* left right)))
-(defmethod value-equal ((left balance) (right integer))
-  (amount-balance-equal right left #'value-equal))
-(defmethod value-equal ((left balance) (right amount))
-  (amount-balance-equal right left #'value-equal))
-(defmethod value-equal ((left integer) (right balance))
-  (amount-balance-equal left right #'value-equal))
+  (and (commodity-equal (amount-commodity left)
+			(amount-commodity right))
+       (= (amount-quantity left) (amount-quantity right))))
 (defmethod value-equal ((left amount) (right balance))
-  (amount-balance-equal left right #'value-equal))
+  nil)
+(defmethod value-equal ((left balance) (right rational))
+  nil)
+(defmethod value-equal ((left balance) (right amount))
+  nil)
 (defmethod value-equal ((left balance) (right balance))
   (balance-equal left right #'value-equal))
 
-(defmethod value-equalp ((left integer) (right integer))
-  (equalp left right))
-(defmethod value-equalp ((left amount) (right integer))
-  (cl:zerop (compare left right)))
-(defmethod value-equalp ((left integer) (right amount))
-  (cl:zerop (compare left right)))
+(defmethod value-equalp ((left rational) (right rational))
+  (= left right))
+(defmethod value-equalp ((left rational) (right amount))
+  nil)
+(defmethod value-equalp ((left rational) (right balance))
+  nil)
+(defmethod value-equalp ((left amount) (right rational))
+  nil)
 (defmethod value-equalp ((left amount) (right amount))
-  (cl:zerop (compare left right)))
-(defmethod value-equalp ((left balance) (right integer))
-  (amount-balance-equal right left #'value-equalp))
-(defmethod value-equalp ((left balance) (right amount))
-  (amount-balance-equal right left #'value-equalp))
-(defmethod value-equalp ((left integer) (right balance))
-  (amount-balance-equal left right #'value-equalp))
+  (and (commodity-equal (amount-commodity left)
+			(amount-commodity right))
+       (= (amount-quantity (value-maybe-round left))
+	  (amount-quantity (value-maybe-round right)))))
 (defmethod value-equalp ((left amount) (right balance))
-  (amount-balance-equal left right #'value-equalp))
+  nil)
+(defmethod value-equalp ((left balance) (right rational))
+  nil)
+(defmethod value-equalp ((left balance) (right amount))
+  nil)
 (defmethod value-equalp ((left balance) (right balance))
   (balance-equal left right #'value-equalp))
 
-(defmethod value-not-equal ((left integer) (right integer))
-  (not (equal left right)))
-(defmethod value-not-equal ((left amount) (right integer))
-  (not (cl:zerop (compare* left right))))
-(defmethod value-not-equal ((left integer) (right amount))
-  (not (cl:zerop (compare* left right))))
+(defmethod value-not-equal ((left rational) (right rational))
+  (not (value-equal left right)))
+(defmethod value-not-equal ((left rational) (right amount))
+  (not (value-equal left right)))
+(defmethod value-not-equal ((left rational) (right balance))
+  (not (value-equal left right)))
+(defmethod value-not-equal ((left amount) (right rational))
+  (not (value-equal left right)))
 (defmethod value-not-equal ((left amount) (right amount))
-  (not (cl:zerop (compare* left right))))
-(defmethod value-not-equal ((left balance) (right integer))
-  (not (amount-balance-equal right left #'value-equal)))
-(defmethod value-not-equal ((left balance) (right amount))
-  (not (amount-balance-equal right left #'value-equal)))
-(defmethod value-not-equal ((left integer) (right balance))
-  (not (amount-balance-equal left right #'value-equal)))
+  (not (value-equal left right)))
 (defmethod value-not-equal ((left amount) (right balance))
-  (not (amount-balance-equal left right #'value-equal)))
+  (not (value-equal left right)))
+(defmethod value-not-equal ((left balance) (right rational))
+  (not (value-equal left right)))
+(defmethod value-not-equal ((left balance) (right amount))
+  (not (value-equal left right)))
 (defmethod value-not-equal ((left balance) (right balance))
-  (not (balance-equal left right #'value-equal)))
+  (not (value-equal left right)))
 
-(defmethod value-not-equalp ((left integer) (right integer))
-  (not (equalp left right)))
-(defmethod value-not-equalp ((left amount) (right integer))
-  (not (cl:zerop (compare left right))))
-(defmethod value-not-equalp ((left integer) (right amount))
-  (not (cl:zerop (compare left right))))
+(defmethod value-not-equalp ((left rational) (right rational))
+  (not (value-equalp left right)))
+(defmethod value-not-equalp ((left rational) (right amount))
+  (not (value-equalp left right)))
+(defmethod value-not-equalp ((left rational) (right balance))
+  (not (value-equalp left right)))
+(defmethod value-not-equalp ((left amount) (right rational))
+  (not (value-equalp left right)))
 (defmethod value-not-equalp ((left amount) (right amount))
-  (not (cl:zerop (compare left right))))
-(defmethod value-not-equalp ((left balance) (right integer))
-  (not (amount-balance-equal right left #'value-equalp)))
-(defmethod value-not-equalp ((left balance) (right amount))
-  (not (amount-balance-equal right left #'value-equalp)))
-(defmethod value-not-equalp ((left integer) (right balance))
-  (not (amount-balance-equal left right #'value-equalp)))
+  (not (value-equalp left right)))
 (defmethod value-not-equalp ((left amount) (right balance))
-  (not (amount-balance-equal left right #'value-equalp)))
+  (not (value-equalp left right)))
+(defmethod value-not-equalp ((left balance) (right rational))
+  (not (value-equalp left right)))
+(defmethod value-not-equalp ((left balance) (right amount))
+  (not (value-equalp left right)))
 (defmethod value-not-equalp ((left balance) (right balance))
-  (not (balance-equal left right #'value-equalp)))
+  (not (value-equalp left right)))
 
-(defmethod value= ((left integer) (right integer))
+(defmethod value= ((left rational) (right rational))
   (value-equalp left right))
-(defmethod value= ((left amount) (right integer))
+(defmethod value= ((left rational) (right amount))
   (value-equalp left right))
-(defmethod value= ((left integer) (right amount))
+(defmethod value= ((left rational) (right balance))
+  (value-equalp left right))
+(defmethod value= ((left amount) (right rational))
   (value-equalp left right))
 (defmethod value= ((left amount) (right amount))
   (value-equalp left right))
-(defmethod value= ((left balance) (right integer))
+(defmethod value= ((left amount) (right balance))
+  (value-equalp left right))
+(defmethod value= ((left balance) (right rational))
   (value-equalp left right))
 (defmethod value= ((left balance) (right amount))
-  (value-equalp left right))
-(defmethod value= ((left integer) (right balance))
-  (value-equalp left right))
-(defmethod value= ((left amount) (right balance))
   (value-equalp left right))
 (defmethod value= ((left balance) (right balance))
   (value-equalp left right))
 
-(defmethod value/= ((left integer) (right integer))
+(defmethod value/= ((left rational) (right rational))
   (not (value-equalp left right)))
-(defmethod value/= ((left amount) (right integer))
+(defmethod value/= ((left rational) (right amount))
   (not (value-equalp left right)))
-(defmethod value/= ((left integer) (right amount))
+(defmethod value/= ((left rational) (right balance))
+  (not (value-equalp left right)))
+(defmethod value/= ((left amount) (right rational))
   (not (value-equalp left right)))
 (defmethod value/= ((left amount) (right amount))
   (not (value-equalp left right)))
-(defmethod value/= ((left balance) (right integer))
+(defmethod value/= ((left amount) (right balance))
+  (not (value-equalp left right)))
+(defmethod value/= ((left balance) (right rational))
   (not (value-equalp left right)))
 (defmethod value/= ((left balance) (right amount))
-  (not (value-equalp left right)))
-(defmethod value/= ((left integer) (right balance))
-  (not (value-equalp left right)))
-(defmethod value/= ((left amount) (right balance))
   (not (value-equalp left right)))
 (defmethod value/= ((left balance) (right balance))
   (not (value-equalp left right)))
@@ -1341,73 +1153,183 @@ associated with the given commodity pool.
 
 ;;;_  + Unary math operators
 
-(defmethod value-abs ((integer integer))
-  (abs integer))
+(defmethod value-abs ((rational rational))
+  (abs rational))
 
 (defmethod value-abs ((amount amount))
   (assert amount)
   (if (cl:minusp (amount-quantity amount))
-      (negate amount)
+      (make-amount :commodity (amount-commodity amount)
+		   :quantity (- (amount-quantity amount))
+		   :keep-precision-p (amount-keep-precision-p amount))
       amount))
 
+(defun apply-to-list (list predicate function &key (first-only t)
+		      (skip-to-next nil))
+  "Given an input LIST, replicate as much of its structure as possible.
+
+  For every member of the list where PREDICATE returns T, FUNCTION is called
+with the list whose CAR is that member; FUNCTION should return the list which
+will be substituted at that point (this makes it possible to remove, change or
+insert the matched cell).  If FIRST-ONLY is NIL, this is only done for every
+cell that matches.  Note: Be very careful when setting FIRST-ONLY to T, for if
+FUNCTION returns a new list that also matches PREDICATE, an infinitely
+recursive loop can occur.  If SKIP-TO-NEXT is T, scanning the function
+contains with the CDR of the value returned by FUNCTION, which can never lead
+to infinite recursion.
+
+  Every cons cell in the list after the last matching member will be shared
+entirely.  For example, consider the following list:
+
+  (defparameter *alist* '((a . 1) (b . 2) (e . 3) (f . 6) (g . 7)))
+
+  The idea is to return a corrected version of this immutable list, while
+sharing as much structure as possible (because the return value is also
+considered immutable).  The following call achieves this:
+
+  (apply-to-list *alist* #'(lambda (member) (eq 'e (car member)))
+                         #'(lambda (list) (cons (cons (caar list) 5)
+                                           (cdr list))))
+    => '((a . 1) (b . 2) (e . 5) (f . 6) (g . 7))
+
+  In the returned list, 15 atoms are shared with the original, while one new
+cons cell and atom are created:
+
+         1, 2, 3:  (a . 1)
+         4, 5, 6:  (b . 2)
+               7:  e
+     8, 9, 10 11:  ((f . 6) ...)
+  12, 13, 14, 15:  ((g . 7))
+
+The usual practice of calling COPY-LIST and changing the incorrect element
+would have result in sharing only 13 atoms.  That code might have looked like
+this:
+
+  (let* ((new-list (copy-list *alist*))
+         (cell-to-replace
+          (member-if #'(lambda (cell) (eq 'e (car cell))) new-list)))
+    (setf (cdar cell-to-replace) 5)
+    new-list)
+
+As you can see, APPLY-TO-LIST is not only more efficient, but much
+more compact as well.  Further, while a discrepancy of 2 cons cells may not
+seem like much, the difference increases by one for every cell after the cell
+that matched.  Thus, if the input list had contained 100 cells beyond (e . 3),
+the difference would have been 102 cells shared, and not just 2.
+
+  In the code above, exactly 4 new cons cells and 1 new atom were created as a
+result of the call:
+
+  1: ((a . 1) ...)
+  2: ((b . 2) ...)
+  3: ((e . 5) ...)
+  4: (e . 5)
+  5: 5
+
+  This is the minimum amount of new information required to represent the new
+structure.  The idea of this function is to support efficient functional
+programming, wherein immutable outputs are derived from immutable inputs
+efficiently by sharing as much structure as possible, resulting in the least
+new memory allocated.  In cases where no references are held, this offers
+little gain for advanced generational garbage collectors (such as input to
+succesive iterations of a recursive function); but where the results are kept
+-- such as a series of computed values that are stored in a results list --
+the savings can reach combinatorial proportions.  (Just such a sitation
+motivated the creation of this function: memory consumption was reduced by a
+factor of 20 over roughly 10,000 elements)."
+  (declare (type list list))
+  (declare (type function predicate))
+  (declare (type function function))
+  (declare (type boolean first-only))
+  (declare (optimize (speed 3) (safety 0)))
+  (let ((first-match (member-if predicate list)))
+    (if first-match
+	(let (new-list last-cell)
+	  (loop while (and list (not (eq list first-match))) do
+	       (setf last-cell
+		     (if last-cell
+			 (setf (cdr last-cell) (list (car list)))
+			 (setf new-list (list (car list))))
+		     list (cdr list)))
+	  (let ((remainder
+		 (if first-only
+		     (funcall function list)
+		     (let ((replacement (funcall function list)))
+		       (if skip-to-next
+			   (progn
+			     (setf (cdr replacement)
+				   (apply-to-list
+				    (cdr replacement) predicate function
+				    :first-only nil
+				    :skip-to-next skip-to-next))
+			     replacement)
+			   (apply-to-list
+			    replacement predicate function
+			    :first-only nil :skip-to-next skip-to-next))))))
+	    (if last-cell
+		(progn
+		  (setf (cdr last-cell) remainder)
+		  new-list)
+		remainder)))
+	list)))
+
+(defun transform-balance (balance predicate function &key (first-only t)
+			  (skip-to-next nil))
+  (make-balance :amounts-map
+		(apply-to-list (get-amounts-map balance)
+			       predicate function
+			       :first-only first-only
+			       :skip-to-next skip-to-next)))
+
 (defmethod value-abs ((balance balance))
-  (let ((tmp (make-balance)))
-    (mapc #'(lambda (entry)
-	      (add* tmp (value-abs (cdr entry))))
-	  (get-amounts-map balance))
-    tmp))
+  (transform-balance balance
+		     #'(lambda (cell) (value-minusp* (cdr cell)))
+		     #'(lambda (list)
+			 (cons (cons (caar list)
+				     (value-abs (cdar list)))
+			       (cdr list)))
+		     :first-only nil :skip-to-next t))
 
 (defun value-round (amount &optional precision)
-  (value-round* (copy-amount amount) precision))
-
-(defun value-round* (amount &optional precision)
-  "Round the given AMOUNT to the stated internal PRECISION.
+  "Round the given AMOUNT to the stated PRECISION.
 
   If PRECISION is less than the current internal precision, data will be lost.
 If it is greater, this operation has no effect."
   (declare (type (or fixnum null) precision))
   (declare (optimize (speed 3) (safety 0)))
-  (etypecase amount
-    (integer amount)
-    (amount
-     (unless precision
-       (let ((commodity (amount-commodity amount)))
-	 (setf precision (if commodity
-			     (display-precision commodity)
-			     0))))
+  (let ((divisor (and precision
+		      (/ 1 (the integer
+			     (expt 10 (the fixnum precision)))))))
+    (etypecase amount
+      (rational (if divisor
+		    (* (round amount divisor) divisor)
+		    amount))
+      (amount
+       (unless divisor
+	 (setf divisor (/ 1 (the integer
+			      (expt 10 (the fixnum
+					 (display-precision
+					  (amount-commodity amount))))))))
+       (make-amount
+	:commodity (amount-commodity amount)
+	:quantity (* (round (amount-quantity amount)
+			    divisor) divisor)
+	:keep-precision-p (amount-keep-precision-p amount))))))
 
-     (let ((internal-precision (amount-precision amount)))
-       (if (< precision internal-precision)
-	   (setf (amount-quantity amount)
-		 (round (amount-quantity amount)
-			(expt 10 (the fixnum
-				   (- internal-precision precision))))
-		 (amount-precision amount) precision)))
-     amount)))
-
-(defmethod negate ((integer integer))
-  (- integer))
+(defmethod negate ((rational rational))
+  (- rational))
 
 (defmethod negate ((amount amount))
-  (negate* (copy-amount amount)))
+  (make-amount
+   :commodity (amount-commodity amount)
+   :quantity (- (amount-quantity amount))
+   :keep-precision-p (amount-keep-precision-p amount)))
 
 (defmethod negate ((balance balance))
-  (negate* (copy-balance balance)))
-
-(defmethod negate* ((integer integer))
-  (error 'amount-error "Cannot apply in-place negation to an integer"
-	 :operands (list integer)))
-
-(defmethod negate* ((amount amount))
-  (setf (amount-quantity amount)
-	(- (amount-quantity amount)))
-  amount)
-
-(defmethod negate* ((balance balance))
-  (mapc #'(lambda (entry)
-	    (negate* (cdr entry)))
-	(get-amounts-map balance))
-  balance)
+  (make-balance :amounts-map
+		(mapcar #'(lambda (cell)
+			    (cons (car cell) (negate (cdr cell))))
+			(get-amounts-map balance))))
 
 ;;;_  + Find AMOUNT of COMMODITY in a BALANCE
 
@@ -1420,512 +1342,346 @@ If it is greater, this operation has no effect."
 
 ;;;_   : Addition
 
-(defmethod add ((left integer) (right integer))
+(defun balance-helper (left right)
+  (declare (type rational left))
+  (declare (type amount right))
+  (make-balance :amounts-map
+		(list (cons nil left)
+		      (cons (amount-commodity right) right))))
+
+(defmethod add ((left rational) (right rational))
   (+ left right))
-(defmethod add ((left amount) (right integer))
-  (add* (copy-amount left) (integer-to-amount right)))
-(defmethod add ((left integer) (right amount))
-  (add* (integer-to-amount left) right))
+
+(defmethod add ((left rational) (right amount))
+  (if (zerop left)
+      right
+      (balance-helper left right)))
+
+(defmethod add ((left rational) (right balance))
+  (add right left))
+
+(defmethod add ((left amount) (right rational))
+  (if (zerop right)
+      left
+      (balance-helper right left)))
+
+(defun apply-between-amounts (left right function &optional adjustor)
+  (if (commodity-equal (amount-commodity left)
+		       (amount-commodity right))
+      (let ((new-value (funcall function (amount-quantity left)
+				(amount-quantity right))))
+	(if (zerop new-value)
+	    0
+	    (make-amount
+	     :commodity (amount-commodity left)
+	     :quantity  new-value
+	     :keep-precision-p (or (amount-keep-precision-p left)
+				   (amount-keep-precision-p right)))))
+      (let ((left-cell (cons (amount-commodity left) left))
+	    (right-cell (cons (amount-commodity right)
+			      (if adjustor
+				  (funcall adjustor right)
+				  right))))
+	(make-balance :amounts-map
+		      (if (commodity-lessp (amount-commodity left)
+					   (amount-commodity right))
+			  (list left-cell right-cell)
+			  (list right-cell left-cell))))))
+
 (defmethod add ((left amount) (right amount))
-  (if (commodity-equal (amount-commodity left)
-		       (amount-commodity right))
-      (add* (copy-amount left) right)
-      ;; Commodities don't match, so create a new balance by merging the two
-      (balance (copy-amount left) (copy-amount right))))
-(defmethod add ((left balance) (right integer))
-  (add* (copy-balance left) (integer-to-amount right)))
-(defmethod add ((left balance) (right amount))
-  (add* (copy-balance left) right))
-(defmethod add ((left integer) (right balance))
-  (add* (integer-to-amount left) right))
+  (apply-between-amounts left right #'+))
+
 (defmethod add ((left amount) (right balance))
-  (add* (copy-balance right) left))
+  (add right left))
+
+(defun apply-to-balance (balance commodity value function &optional adjustor)
+  (let ((amounts-map
+	 (apply-to-list
+	  (get-amounts-map balance)
+	  #'(lambda (cell)
+	      (or (commodity-equal (car cell) commodity)
+		  (not (commodity-lessp (car cell) commodity))))
+	  #'(lambda (list)
+	      (let ((new-value (funcall function (cdar list) value)))
+		(if (commodity-equal (caar list) commodity)
+		    (if (value-zerop* new-value)
+			(cdr list)
+			(cons (cons (caar list) new-value) (cdr list)))
+		    (cons (cons (car list)
+				(if adjustor
+				    (funcall adjustor value)
+				    value))
+			  list)))))))
+    (if (eq amounts-map (get-amounts-map balance))
+	(make-balance :amounts-map
+		      (nconc (copy-list (get-amounts-map balance))
+			     (list (cons commodity
+					 (if adjustor
+					     (funcall adjustor value)
+					     value)))))
+	;; If the result of the subtraction is a balance of one commodity,
+	;; return it as a single amount.
+	(if (= 1 (length amounts-map))
+	    (cdar amounts-map)
+	    (make-balance :amounts-map amounts-map)))))
+
+(defmethod add ((left balance) (right rational))
+  (if (zerop right)
+      left
+      (apply-to-balance left nil right #'add)))
+
+(defmethod add ((left balance) (right amount))
+  (apply-to-balance left (amount-commodity right) right #'add))
+
+(defun apply-between-balances (left right function &optional adjustor)
+  (let ((left-amounts (get-amounts-map left))
+	(right-amounts (get-amounts-map right))
+	new-amounts-map last-cell)
+    (loop while (or left-amounts right-amounts) do
+	 (cond ((and left-amounts right-amounts
+		     (commodity-equal (caar left-amounts)
+				      (caar right-amounts)))
+		(let ((new-value (funcall function (cdar left-amounts)
+					  (cdar right-amounts))))
+		  (unless (value-zerop* new-value)
+		    (let ((new-cell (cons (caar left-amounts) new-value)))
+		      (setf last-cell
+			    (if last-cell
+				(setf (cdr last-cell) (list new-cell))
+				(setf new-amounts-map (list new-cell))))))
+		  (setf left-amounts (cdr left-amounts)
+			right-amounts (cdr right-amounts))))
+	       ((or (null right-amounts)
+		    (and left-amounts
+			 (commodity-lessp (caar left-amounts)
+					  (caar right-amounts))))
+		(setf last-cell
+		      (if last-cell
+			  (setf (cdr last-cell) (list (car left-amounts)))
+			  (setf new-amounts-map (list (car left-amounts))))
+		      left-amounts (cdr left-amounts)))
+	       (t
+		(setf last-cell
+		      (if last-cell
+			  (setf (cdr last-cell)
+				(list (cons (caar right-amounts)
+					    (if adjustor
+						(funcall adjustor
+							 (cdar right-amounts))
+						(cdar right-amounts)))))
+			  (setf new-amounts-map
+				(list (cons (caar right-amounts)
+					    (if adjustor
+						(funcall adjustor
+							 (cdar right-amounts))
+						(cdar right-amounts))))))
+		      right-amounts (cdr right-amounts)))))
+    ;; If the result of the subtraction is a balance of one commodity, return
+    ;; it as a single amount.
+    (let ((new-length (length new-amounts-map)))
+      (cond
+	((zerop new-length)
+	 0)
+	((= 1 new-length)
+	 (cdar new-amounts-map))
+	(t
+	 (make-balance :amounts-map new-amounts-map))))))
+
 (defmethod add ((left balance) (right balance))
-  (add* (copy-balance left) right))
-
-(defmethod add* ((left integer) (right integer))
-  (error 'amount-error :msg "Integers do not support in-place addition"
-	 :operands (list left right)))
-(defmethod add* ((left amount) (right integer))
-  (add* left (integer-to-amount right)))
-(defmethod add* ((left integer) (right amount))
-  (error 'amount-error :msg "Integers do not support in-place addition"
-	 :operands (list left right)))
-
-(defmethod add* ((left amount) (right amount))
-  (if (commodity-equal (amount-commodity left)
-		       (amount-commodity right))
-      (cond ((= (amount-precision left)
-		(amount-precision right))
-	     (setf (amount-quantity left)
-		   (+ (amount-quantity left) (amount-quantity right))))
-	    ((< (amount-precision left)
-		(amount-precision right))
-	     (setf (amount-quantity left)
-		   (+ (resize-quantity left (amount-precision right))
-		      (amount-quantity right))
-		   (amount-precision left) (amount-precision right)))
-	    (t
-	     (setf (amount-quantity left)
-		   (+ (amount-quantity left)
-		      (resize-quantity right (amount-precision left))))))
-      (error "Cannot add amounts \"in place\" of differing commodities"))
-  left)
-
-(defmethod add* ((left balance) (right integer))
-  (add* left (integer-to-amount right)))
-
-(defmethod add* ((left balance) (right amount))
-  (unless (value-zerop* right)
-    (let ((current-amount
-	   (amount-in-balance left (amount-commodity right))))
-      (if current-amount
-	  (add* current-amount right)	; modifies current-amount directly
-	  (progn
-	    (push (cons (amount-commodity right) (copy-amount right))
-		  (get-amounts-map left))
-	    ;; This is where the commodities need to get resorted, since we
-	    ;; just pushed a new one on
-	    (when (> (length (get-amounts-map left)) 1)
-	      (setf (get-amounts-map left)
-		    (sort (get-amounts-map left) #'commodity-lessp
-			  :key #'car)))))))
-  left)
-
-(defmethod add* ((left integer) (right balance))
-  (error 'amount-error :msg "Integers do not support in-place addition"
-	 :operands (list left right)))
-
-(defmethod add* ((left amount) (right balance))
-  (if (= 1 (balance-commodity-count right))
-      (add* left (balance-first-amount right))
-      (error 'amount-error :msg "Cannot in-place add a balance to an amount"
-	     :operands (list left right))))
-
-(defmethod add* ((left balance) (right balance))
-  (mapc #'(lambda (entry)
-	    (add* left (cdr entry)))
-	(get-amounts-map right))
-  left)
+  (apply-between-balances left right #'add))
 
 ;;;_   : Subtraction
 
-(defmethod subtract ((left integer) (right integer))
+(defmethod subtract ((left rational) (right rational))
   (- left right))
-(defmethod subtract ((left amount) (right integer))
-  (subtract* (copy-amount left) (integer-to-amount right)))
-(defmethod subtract ((left integer) (right amount))
-  (subtract* (integer-to-amount left) right))
+
+(defmethod subtract ((left rational) (right amount))
+  (if (zerop left)
+      (negate right)
+      (balance-helper left (negate right))))
+
+(defmethod subtract ((left rational) (right balance))
+  (add (negate right) left))
+
+(defmethod subtract ((left amount) (right rational))
+  (if (zerop right)
+      left
+      (balance-helper (- right) left)))
+
 (defmethod subtract ((left amount) (right amount))
-  (if (commodity-equal (amount-commodity left)
-		       (amount-commodity right))
-      (subtract* (copy-amount left) right)
-      ;; Commodities don't match, so create a balance by merging the two
-      (balance (copy-amount left) (negate right))))
-(defmethod subtract ((left balance) (right integer))
-  (subtract* (copy-balance left) (integer-to-amount right)))
-(defmethod subtract ((left balance) (right amount))
-  (subtract* (copy-balance left) right))
-(defmethod subtract ((left integer) (right balance))
-  (error 'amount-error :msg "Cannot subtract a BALANCE from an INTEGER"
-	 :operands (list left right)))
+  (apply-between-amounts left right #'- #'negate))
+
 (defmethod subtract ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"
-	 :operands (list left right)))
+  (add (negate right) left))
+
+(defmethod subtract ((left balance) (right rational))
+  (if (zerop right)
+      left
+      (apply-to-balance left nil right #'subtract #'negate)))
+
+(defmethod subtract ((left balance) (right amount))
+  (apply-to-balance left (amount-commodity right) right
+		    #'subtract #'negate))
+
 (defmethod subtract ((left balance) (right balance))
-  (subtract* (copy-balance left) right))
-
-(defmethod subtract* ((left integer) (right integer))
-  (error 'amount-error :msg "Integers do not support in-place subtraction"
-	 :operands (list left right)))
-(defmethod subtract* ((left amount) (right integer))
-  (subtract* left (integer-to-amount right)))
-(defmethod subtract* ((left integer) (right amount))
-  (error 'amount-error :msg "Integers do not support in-place subtraction"
-	 :operands (list left right)))
-
-(defmethod subtract* ((left amount) (right amount))
-  (if (commodity-equal (amount-commodity left)
-		       (amount-commodity right))
-      (cond ((= (amount-precision left)
-		(amount-precision right))
-	     (setf (amount-quantity left)
-		   (- (amount-quantity left) (amount-quantity right))))
-	    ((< (amount-precision left)
-		(amount-precision right))
-	     (setf (amount-quantity left)
-		   (- (resize-quantity left (amount-precision right))
-		      (amount-quantity right))
-		   (amount-precision left) (amount-precision right)))
-	    (t
-	     (setf (amount-quantity left)
-		   (- (amount-quantity left)
-		      (resize-quantity right (amount-precision left))))))
-      (error "Cannot subtract amounts \"in place\" of differing commodities"))
-  left)
-
-(defmethod subtract* ((left balance) (right integer))
-  (subtract* left (integer-to-amount right)))
-
-(defmethod subtract* ((left balance) (right amount))
-  (unless (value-zerop* right)
-    (let* ((amounts-map (get-amounts-map left))
-	   (found-entry (assoc (amount-commodity right) amounts-map
-			       :test #'commodity-equal))
-	   (current-amount (cdr found-entry)))
-      (if current-amount
-	  (progn
-	    ;; modify current-amount directly
-	    (subtract* current-amount right)
-	    ;; if the result is "true zero", drop this commodity from the
-	    ;; balance altogether
-	    (if (value-zerop* current-amount)
-		(setf (get-amounts-map left)
-		      (delete found-entry amounts-map)))
-	    ;; if the amounts map is now only one element long, return just
-	    ;; the amount, since this isn't a balance anymore
-	    (if (cdr (get-amounts-map left))
-		left
-		current-amount))
-	  (progn
-	    (push (cons (amount-commodity right) (negate right))
-		  (get-amounts-map left))
-	    left)))))
-
-(defmethod subtract* ((left integer) (right balance))
-  (error 'amount-error :msg "Integers do not support in-place subtraction"
-	 :operands (list left right)))
-(defmethod subtract* ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot subtract a BALANCE from an AMOUNT"
-	 :operands (list left right)))
-(defmethod subtract* ((left balance) (right balance))
-  (mapc #'(lambda (entry)
-	    (subtract* left (cdr entry)))
-	(get-amounts-map right))
-  left)
+  (apply-between-balances left right #'subtract #'negate))
 
 ;;;_   : Multiplication
 
-(defmethod multiply ((left integer) (right integer))
+(defmethod multiply ((left rational) (right rational))
   (* left right))
-(defmethod multiply ((left amount) (right integer))
-  (multiply* (copy-amount left) (integer-to-amount right)))
-(defmethod multiply ((left integer) (right amount))
-  (multiply* (integer-to-amount left) right))
+
+(defmethod multiply ((left rational) (right amount))
+  (multiply right left))
+
+(defmethod multiply ((left rational) (right balance))
+  (multiply right left))
+
+(defmethod multiply ((left amount) (right rational))
+  (if (zerop right)
+      0
+      (make-amount :commodity (amount-commodity left)
+		   :quantity (* (amount-quantity left) right)
+		   :keep-precision-p (amount-keep-precision-p left))))
+
 (defmethod multiply ((left amount) (right amount))
-  (multiply* (copy-amount left) right))
-(defmethod multiply ((left balance) (right integer))
-  (multiply* (copy-balance left) (integer-to-amount right)))
+  (make-amount
+   :commodity (amount-commodity left)
+   :quantity (* (amount-quantity left) (amount-quantity right))
+   :keep-precision-p (or (amount-keep-precision-p left)
+			 (amount-keep-precision-p right))))
+
+(defun multiply-in-balance (balance commodity value)
+  (transform-balance balance
+		     #'(lambda (cell) (commodity-equal (car cell) commodity))
+		     #'(lambda (list)
+			 (cons (cons (caar list)
+				     (multiply (cdar list) value))
+			       (cdr list)))))
+
+(defmethod multiply ((left balance) (right rational))
+  (if (zerop right)
+      left
+      (multiply-in-balance left nil right)))
+
 (defmethod multiply ((left balance) (right amount))
-  (multiply* (copy-balance left) right))
-(defmethod multiply ((left integer) (right balance))
-  (error 'amount-error :msg "Cannot multiply an integer by a balance"
-	 :operands (list left right)))
-(defmethod multiply ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot multiply an amount by a balance"
-	 :operands (list left right)))
-(defmethod multiply ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot multiply a balance by another balance"
-	 :operands (list left right)))
-
-(defmethod multiply* ((left integer) (right integer))
-  (error 'amount-error :msg "Integers do not support in-place multiplication"
-	 :operands (list left right)))
-(defmethod multiply* ((left amount) (right integer))
-  (multiply* left (integer-to-amount right)))
-(defmethod multiply* ((left integer) (right amount))
-  (error 'amount-error :msg "Integers do not support in-place multiplication"
-	 :operands (list left right)))
-
-(defun set-amount-commodity-and-round* (left right)
-  (declare (type amount left))
-  (declare (type amount right))
-  (declare (optimize (speed 3) (safety 0)))
-  (let ((commodity (amount-commodity left)))
-    (unless commodity
-      (setf (amount-commodity left)
-	    (setf commodity (amount-commodity right))))
-
-    ;; If this amount has a commodity, and we're not dealing with plain
-    ;; numbers, or internal numbers (which keep full precision at all times),
-    ;; then round the number to within the commodity's precision plus six
-    ;; places.
-    (when (and commodity (not (amount-keep-precision-p left)))
-      (let ((commodity-precision
-	     (the fixnum (display-precision commodity))))
-	(when (> (amount-precision left)
-		 (+ (the fixnum *extra-precision*)
-		    commodity-precision))
-	  (setf (amount-quantity left)
-		(cl:round (amount-quantity left)
-			  (expt 10 (the fixnum
-				     (- (amount-precision left)
-					(+ (the fixnum *extra-precision*)
-					   commodity-precision))))))
-	  (setf (amount-precision left)
-		(+ (the fixnum *extra-precision*)
-		   commodity-precision))))))
-  left)
-
-(defmethod multiply* ((left amount) (right amount))
-  (setf (amount-quantity left) (* (amount-quantity left)
-				  (amount-quantity right))
-	(amount-precision left) (+ (amount-precision left)
-				   (amount-precision right)))
-  (set-amount-commodity-and-round* left right))
-
-(defmethod multiply* ((left balance) (right integer))
-  (multiply* left (integer-to-amount right)))
-
-(defmethod multiply* ((left balance) (right amount))
-  (cond ((value-zerop* right) right)
-	((value-zerop* left) left)
-	(t
-	 ;; Multiplying by an amount causes all the balance's amounts to be
-	 ;; multiplied by the same factor.
-	 (mapc #'(lambda (entry)
-		   (multiply* (cdr entry) right))
-	       (get-amounts-map left))
-	 left)))
-
-(defmethod multiply* ((left integer) (right balance))
-  (error 'amount-error :msg "Integers do not support in-place multiplication"
-	 :operands (list left right)))
-(defmethod multiply* ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot multiply an amount by a balance"
-	 :operands (list left right)))
-(defmethod multiply* ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot multiply a balance by another balance"
-	 :operands (list left right)))
+  (multiply-in-balance left (amount-commodity right) right))
 
 ;;;_   : Division
 
-(defmethod divide ((left integer) (right integer))
-  (round left right))
-(defmethod divide ((left amount) (right integer))
-  (divide* (copy-amount left) (integer-to-amount right)))
-(defmethod divide ((left integer) (right amount))
-  (divide* (integer-to-amount left) right))
+(defmethod divide ((left rational) (right rational))
+  (/ left right))
+
+(defmethod divide ((left rational) (right amount))
+  (divide right left))
+
+(defmethod divide ((left rational) (right balance))
+  (divide right left))
+
+(defmethod divide ((left amount) (right rational))
+  (make-amount :commodity (amount-commodity left)
+	       :quantity (/ (amount-quantity left) right)
+	       :keep-precision-p (amount-keep-precision-p left)))
+
 (defmethod divide ((left amount) (right amount))
-  (divide* (copy-amount left) right))
-(defmethod divide ((left balance) (right integer))
-  (divide* (copy-balance left) (integer-to-amount right)))
+  (make-amount
+   :commodity (amount-commodity left)
+   :quantity (/ (amount-quantity left) (amount-quantity right))
+   :keep-precision-p (or (amount-keep-precision-p left)
+			 (amount-keep-precision-p right))))
+
+(defun divide-in-balance (balance commodity value)
+  (transform-balance balance
+		     #'(lambda (cell) (commodity-equal (car cell) commodity))
+		     #'(lambda (list)
+			 (cons (cons (caar list)
+				     (divide (cdar list) value))
+			       (cdr list)))))
+
+(defmethod divide ((left balance) (right rational))
+  (divide-in-balance left nil right))
+
 (defmethod divide ((left balance) (right amount))
-  (divide* (copy-balance left) right))
-(defmethod divide ((left integer) (right balance))
-  (error 'amount-error :msg "Cannot divide an integer by a balance"
-	 :operands (list left right)))
-(defmethod divide ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"
-	 :operands (list left right)))
-(defmethod divide ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot divide a balance by another balance"
-	 :operands (list left right)))
-
-(defmethod divide* ((left integer) (right integer))
-  (error 'amount-error :msg "Integers do not support in-place division"
-	 :operands (list left right)))
-(defmethod divide* ((left amount) (right integer))
-  (divide* left (integer-to-amount right)))
-(defmethod divide* ((left integer) (right amount))
-  (error 'amount-error :msg "Integers do not support in-place division"
-	 :operands (list left right)))
-
-(defmethod divide* ((left amount) (right amount))
-  (declare (optimize (speed 3) (safety 0)))
-  ;; Increase the value's precision, to capture fractional parts after
-  ;; the divide.  Round up in the last position.
-  (if (value-zerop right)
-      (error 'amount-error :msg "Attempt to divide by zero"
-	     :operands (list left right)))
-
-  (setf (amount-quantity left)
-	(cl:round
-	 (locally #+sbcl (declare (sb-ext:muffle-conditions
-				   sb-ext:compiler-note))
-		  (* (amount-quantity left)
-		     (the integer
-		       (expt 10
-			     (the fixnum
-			       (+ (1+ (the fixnum *extra-precision*))
-				  (* 2 (amount-precision right))
-				  (amount-precision left)))))))
-	 (amount-quantity right))
-
-	(amount-precision left)
-	(+ (the fixnum *extra-precision*)
-	   (* 2 (amount-precision left))
-	   (amount-precision right))
-
-	(amount-quantity left)
-	(cl:round (amount-quantity left)
-		  (expt 10
-			(the fixnum
-			  (- (1+ (amount-precision left))
-			     (amount-precision left))))))
-
-  (set-amount-commodity-and-round* left right))
-
-(defmethod divide* ((left balance) (right integer))
-  (divide* left (integer-to-amount right)))
-
-(defmethod divide* ((left balance) (right amount))
-  (cond ((value-zerop* right)
-	 (error 'amount-error :msg "Divide by zero"
-		:operands (list left right)))
-	((value-zerop* left) left)
-	(t
-	 ;; Dividing by an amount causes all the balance's amounts to be
-	 ;; divided by the same factor.
-	 (mapc #'(lambda (entry)
-		   (divide* (cdr entry) right))
-	       (get-amounts-map left))
-	 left)))
-
-(defmethod divide* ((left integer) (right balance))
-  (error 'amount-error :msg "Integers do not support in-place division"
-	 :operands (list left right)))
-(defmethod divide* ((left amount) (right balance))
-  (error 'amount-error :msg "Cannot divide an amount by a balance"
-	 :operands (list left right)))
-(defmethod divide* ((left balance) (right balance))
-  (error 'amount-error :msg "Cannot divide a balance by another balance"
-	 :operands (list left right)))
+  (divide-in-balance left (amount-commodity right) right))
 
 ;;;_ * BALANCE specific
 
-;;;_  + Optimize the given value, returning its cheapest equivalent
-
-(defmethod optimize-value ((integer integer))
-  integer)
-
-(defmethod optimize-value ((amount amount))
-  (if (value-zerop* amount) 0 amount))
-
-(defmethod optimize-value ((balance balance))
-  (let ((amounts-map (get-amounts-map balance)))
-    (if (or (null amounts-map)
-	    (cl:zerop (length amounts-map)))
-	0
-	(if (= 1 (length amounts-map))
-	    (optimize-value (cdr (first amounts-map)))
-	    balance))))
-
-(defmethod value-amount ((integer integer))
-  (integer-to-amount integer))
-
-(defmethod value-amount ((amount amount))
-  amount)
-
-(defmethod value-amount ((balance balance))
-  (let ((amounts-map (get-amounts-map balance)))
-    (if (or (null amounts-map)
-	    (cl:zerop (length amounts-map)))
-	(integer-to-amount 0)
-	(if (= 1 (length amounts-map))
-	    (cdr (first amounts-map))
-	    (error 'amount-error
-		   :msg "Cannot yield amount of a multi-commodity balance"
-		   :operands (list balance))))))
-
 ;;;_  + Print and format AMOUNT and BALANCE
+
+(defun print-value-to-string (commodity commodity-symbol quantity
+			      precision output-stream)
+  (flet ((maybe-gap ()
+	   (unless (commodity-symbol-connected-p commodity-symbol)
+	     (princ #\Space output-stream))))
+
+    (when (and commodity-symbol
+	       (commodity-symbol-prefixed-p commodity-symbol))
+      (princ (commodity-name commodity) output-stream)
+      (maybe-gap))
+
+    (multiple-value-bind (quotient remainder)
+	(truncate quantity)
+
+      (format output-stream "~:[~,,vD~;~,,v:D~]"
+	      (and commodity (commodity-thousand-marks-p commodity))
+	      #\, quotient)
+
+      (unless (and precision (zerop precision))
+	(format output-stream "~v,0,,'0$" (or precision 3) (abs remainder))))
+      
+    (when (and commodity-symbol
+	       (not (commodity-symbol-prefixed-p commodity-symbol)))
+      (maybe-gap)
+      (princ (commodity-name commodity) output-stream)))
+
+  (if (annotated-commodity-p commodity)
+      (format-commodity-annotation (commodity-annotation commodity)
+				   :output-stream output-stream)))
+
+(defmethod print-value ((rational rational) &key
+			(output-stream *standard-output*)
+			omit-commodity-p
+			full-precision-p
+			(width nil)
+			latter-width
+			line-feed-string)
+  (declare (ignore omit-commodity-p full-precision-p latter-width
+		   line-feed-string))
+  ;; jww (2007-12-07): Make the amount of displayed precision configurable
+  (format output-stream "~v,3F" width rational))
 
 (defmethod print-value ((amount amount) &key
 			(output-stream *standard-output*)
-			(omit-commodity-p nil) (full-precision-p nil)
-			(width nil) latter-width line-feed-string)
+			(omit-commodity-p nil)
+			(full-precision-p nil)
+			(width nil)
+			latter-width
+			line-feed-string)
   (declare (type stream output-stream))
   (declare (type boolean omit-commodity-p))
   (declare (type boolean full-precision-p))
   (declare (type (or fixnum null) width))
-  (declare (ignore latter-width))
-  (declare (ignore line-feed-string))
+  (declare (ignore latter-width line-feed-string))
   (declare (optimize (speed 3) (safety 0)))
 
   (let* ((commodity (amount-commodity amount))
 	 (omit-commodity-p (or omit-commodity-p (null commodity)))
 	 (commodity-symbol (and (not omit-commodity-p) commodity
 				(commodity-symbol commodity)))
-	 (precision (amount-precision amount))
-	 (quantity (amount-quantity amount))
 	 (display-precision
 	  (the fixnum
-	    (if (or (null commodity)
-		    full-precision-p
-		    (amount-keep-precision-p amount))
-		(amount-precision amount)
-		(display-precision commodity)))))
-
-    (multiple-value-bind (quotient remainder)
-	(truncate
-	 (cond
-	   ((> precision display-precision)
-	    (round quantity
-		   (the integer
-		     (expt 10 (the fixnum
-				(- (the fixnum precision)
-				   (the fixnum display-precision)))))))
-	   ((> display-precision precision)
-	    (* quantity
-	       (the integer
-		 (expt 10 (the fixnum
-			    (- (the fixnum display-precision)
-			       (the fixnum precision)))))))
-	   (t
-	    quantity))
-	 (the integer
-	  (expt 10 (the fixnum display-precision))))
-
-      (let ((output
-	     (with-output-to-string (buffer)
-	       (flet ((maybe-gap ()
-			(unless (commodity-symbol-connected-p commodity-symbol)
-			  (princ #\Space buffer))))
-		 (when (and (not omit-commodity-p)
-			    (commodity-symbol-prefixed-p commodity-symbol))
-		   (princ (commodity-name amount) buffer)
-		   (maybe-gap))
-
-		 (if (cl:minusp quantity)
-		     (format buffer "-"))
-		 (format buffer "~:[~,,vD~;~,,v:D~]" ;
-			 (and commodity
-			      (commodity-thousand-marks-p commodity))
-			 (if *european-style* #\. #\,) (cl:abs quotient))
-
-		 (unless (cl:zerop display-precision)
-		   (format buffer "~C~v,'0D"
-			   (if *european-style* #\, #\.)
-			   display-precision (cl:abs remainder)))
-      
-		 (when (and (not omit-commodity-p)
-			    (not (commodity-symbol-prefixed-p commodity-symbol)))
-		   (maybe-gap)
-		   (princ (commodity-name amount) buffer)))
-
-	       (if (and (not omit-commodity-p) commodity
-			(annotated-commodity-p commodity))
-		   (format-commodity-annotation (commodity-annotation commodity)
-						:output-stream buffer)))))
-	(if width
-	    (format output-stream "~v@A" width output)
-	    (princ output output-stream)))))
-  (values))
-
-(defmethod print-value ((integer integer) &key
-			(output-stream *standard-output*)
-			(omit-commodity-p nil)
-			(full-precision-p nil)
-			(width nil)
-			(latter-width nil)
-			(line-feed-string nil))
-  (declare (ignore latter-width))
-  (declare (ignore line-feed-string))
-  (print-value (integer-to-amount integer)
-	       :output-stream output-stream
-	       :omit-commodity-p omit-commodity-p
-	       :full-precision-p full-precision-p
-	       :width width))
+	    (unless (or (null commodity) full-precision-p
+			(amount-keep-precision-p amount))
+	      (display-precision commodity)))))
+    (if width
+	(format output-stream "~v@A" width
+		(with-output-to-string (buffer)
+		  (print-value-to-string commodity commodity-symbol
+					 (amount-quantity amount)
+					 display-precision buffer)))
+	(print-value-to-string commodity commodity-symbol
+			       (amount-quantity amount)
+			       display-precision output-stream))))
 
 (defun compare-amounts-visually (left right)
   (declare (type (cons (or commodity null) amount) left))
@@ -1958,37 +1714,30 @@ If it is greater, this operation has no effect."
 		(setf first nil)))
 	  (get-amounts-map balance))
     (if first
-	(print-value (integer-to-amount 0)
-		     :width width :output-stream output-stream)))
-  (values))
+	(format output-stream "~vD" width 0))))
 
-(defmethod format-value ((integer integer) &key
-			 (omit-commodity-p nil)
-			 (full-precision-p nil)
+(defmethod format-value ((rational rational) &key
+			 omit-commodity-p
+			 full-precision-p
 			 (width nil)
-			 (latter-width nil)
-			 (line-feed-string nil))
-  (declare (ignore latter-width))
-  (declare (ignore line-feed-string))
+			 latter-width
+			 line-feed-string)
+  (declare (ignore omit-commodity-p full-precision-p latter-width
+		   line-feed-string))
   (with-output-to-string (out)
-    (print-value (integer-to-amount integer) :output-stream out
-		 :omit-commodity-p omit-commodity-p
-		 :full-precision-p full-precision-p
-		 :width width)))
+    (print-value rational :output-stream out :width width)))
 
 (defmethod format-value ((amount amount) &key
 			 (omit-commodity-p nil)
 			 (full-precision-p nil)
 			 (width nil)
-			 (latter-width nil)
-			 (line-feed-string nil))
-  (declare (ignore latter-width))
-  (declare (ignore line-feed-string))
+			 latter-width
+			 line-feed-string)
+  (declare (ignore latter-width line-feed-string))
   (with-output-to-string (out)
     (print-value amount :output-stream out
 		 :omit-commodity-p omit-commodity-p
-		 :full-precision-p full-precision-p
-		 :width width)))
+		 :full-precision-p full-precision-p :width width)))
 
 (defmethod format-value ((balance balance) &key
 			 (omit-commodity-p nil)
@@ -2004,24 +1753,7 @@ If it is greater, this operation has no effect."
 		 :latter-width latter-width
 		 :line-feed-string line-feed-string)))
 
-(declaim (inline quantity-string))
-(defun quantity-string (amount)
-  (assert amount)
-  (format-value amount :omit-commodity-p t :full-precision-p t))
-
 ;;;_ * COMMODITY
-
-;;;_  + Return copy of AMOUNT without a commodity
-
-(defun amount-sans-commodity (amount)
-  (declare (type amount amount))
-  (let ((commodity (amount-commodity amount)))
-    (if commodity
-	(let ((tmp (copy-amount amount)))
-	  (assert (amount-commodity tmp))
-	  (setf (amount-commodity tmp) nil)
-	  tmp)
-	amount)))
 
 ;;;_  - Parse commodity symbols
 
@@ -2031,7 +1763,7 @@ If it is greater, this operation has no effect."
   (declare (optimize (speed 3) (safety 0)))
   (let ((code (char-code c)))
     (and (< code 256)
-	 (aref (the (simple-array boolean (255))
+	 (aref (the (simple-array boolean (256))
 		 *invalid-symbol-chars*) code))))
 
 (declaim (inline symbol-name-needs-quoting-p))
@@ -2229,6 +1961,8 @@ For the default, <=, this means no other item will be more less than IT in the
 tree than the one found."
   (declare (type fixed-time it))
   (declare (type rbt:rbt-node root))
+  (declare (type function test))
+  (declare (type function key))
   (the (or pricing-entry null)
     (loop
        with p = root
@@ -2269,19 +2003,22 @@ tree than the one found."
 			 &optional fixed-time)
   (market-value (get-referent annotated-commodity) fixed-time))
 
+(defmethod market-value ((rational rational) &optional fixed-time)
+  (declare (ignore fixed-time))
+  rational)
+
 (defmethod market-value ((amount amount) &optional fixed-time)
-  (let ((commodity (amount-commodity amount)))
-    (when commodity
-      (let ((value (market-value commodity fixed-time)))
-	(if value
-	    (value-round* (multiply value amount)))))))
+  (let ((value (market-value (amount-commodity amount) fixed-time)))
+    (if value
+	(value-round (multiply value amount))
+	amount)))
 
 (defmethod market-value ((balance balance) &optional fixed-time)
-  (let ((value-balance (make-balance)))
-    (mapc #'(lambda (entry)
-	      (add* value-balance (market-value (cdr entry) fixed-time)))
-	  (get-amounts-map balance))
-    value-balance))
+  (make-balance :amounts-map
+		(mapcar #'(lambda (cell)
+			    (cons (car cell)
+				  (market-value (cdr cell) fixed-time)))
+			(get-amounts-map balance))))
 
 ;;;_  + Exchange a commodity
 
@@ -2485,40 +2222,24 @@ DETAILS, of type COMMODITY-ANNOTATION.
 	  (if (annotation-price annotation)
 	      (error 'amount-error :msg
 		     "Commodity annotation specifies more than one price"))
-
 	  (read-char in)
-	  (let* ((price-string
-		  (read-until in #\} "Commodity price lacks closing brace"))
-		 (tmp-amount (parse-amount* price-string)))
-
-	    ;; Since this price will maintain its own precision, make sure
-	    ;; it is at least as large as the base commodity, since the user
-	    ;; may have only specified {$1} or something similar.
-	    (let* ((commodity (amount-commodity tmp-amount))
-		   (precision (display-precision commodity)))
-	      (if (and commodity
-		       (< (the fixnum (amount-precision tmp-amount))
-			  (the fixnum precision)))
-		  (setf tmp-amount (value-round* tmp-amount precision))))
-
-	    (setf (annotation-price annotation) tmp-amount)))
+	  (setf (annotation-price annotation)
+		(parse-amount*
+		 (read-until in #\} "Commodity price lacks closing brace"))))
 
 	 ((char= c #\[)
 	  (if (annotation-date annotation)
 	      (error 'amount-error :msg
 		     "Commodity annotation specifies more than one date"))
-
 	  (read-char in)
-	  (let* ((date-string
-		  (read-until in #\] "Commodity date lacks closing bracket"))
-		 (tmp-date (strptime date-string)))
-	    (setf (annotation-date annotation) tmp-date)))
+	  (setf (annotation-date annotation)
+		(strptime (read-until in #\]
+				      "Commodity date lacks closing bracket"))))
 
 	 ((char= c #\()
 	  (if (annotation-tag annotation)
 	      (error 'amount-error :msg
 		     "Commodity annotation specifies more than one tag"))
-
 	  (read-char in)
 	  (setf (annotation-tag annotation)
 		(read-until in #\) "Commodity tag lacks closing parenthesis")))
@@ -2662,39 +2383,41 @@ from the string, for example:
   (declare (type boolean keep-price))
   (declare (type boolean keep-date))
   (declare (type boolean keep-tag))
-  (the amount
-    (if (and keep-price keep-date keep-tag)
-	amount
-	(let ((commodity (amount-commodity amount)))
-	  (if (or (null commodity)
-		  (not (annotated-commodity-p commodity))
-		  (and keep-price keep-date keep-tag))
-	      amount
-	      (let ((tmp (copy-amount amount)))
-		(setf (amount-commodity tmp)
-		      (strip-annotations commodity
-					 :keep-price keep-price
-					 :keep-date keep-date
-					 :keep-tag keep-tag))
-		tmp))))))
+  (if (and keep-price keep-date keep-tag)
+      amount
+      (let ((commodity (amount-commodity amount)))
+	(if (or (null commodity)
+		(not (annotated-commodity-p commodity))
+		(and keep-price keep-date keep-tag))
+	    amount
+	    (make-amount :commodity
+			 (strip-annotations commodity
+					    :keep-price keep-price
+					    :keep-date keep-date
+					    :keep-tag keep-tag)
+			 :quantity (amount-quantity amount)
+			 :keep-precision-p
+			 (amount-keep-precision-p amount))))))
 
 (defmethod strip-annotations ((balance balance)
 			      &key keep-price keep-date keep-tag)
   (declare (type boolean keep-price))
   (declare (type boolean keep-date))
   (declare (type boolean keep-tag))
-  (the balance
-    (if (and keep-price keep-date keep-tag)
-	balance
-	(let ((stripped-balance (make-balance)))
-	  (mapc #'(lambda (entry)
-		    (add* stripped-balance
-			  (strip-annotations (cdr entry)
-					     :keep-price keep-price
-					     :keep-date  keep-date
-					     :keep-tag   keep-tag)))
-		(get-amounts-map balance))
-	  stripped-balance))))
+  (if (and keep-price keep-date keep-tag)
+      balance
+      (let ((stripped-balance (make-balance)))
+	(mapc #'(lambda (entry)
+		  (setf stripped-balance
+			(add stripped-balance
+			     (strip-annotations (cdr entry)
+						:keep-price keep-price
+						:keep-date  keep-date
+						:keep-tag   keep-tag))))
+	      (get-amounts-map balance))
+	(if (= 1 (length (get-amounts-map stripped-balance)))
+	    (cdar (get-amounts-map stripped-balance))
+	    stripped-balance))))
 
 (provide 'cambl)
 
