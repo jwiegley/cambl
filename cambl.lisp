@@ -247,7 +247,6 @@
 	   read-exact-amount
 	   amount-quantity
 
-	   balance
 	   balance-p
 	   amount-in-balance
 	   get-amounts-map
