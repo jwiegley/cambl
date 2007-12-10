@@ -2161,7 +2161,8 @@ from the string, for example:
   (declare (type commodity-annotation annotation))
   (declare (type stream output-stream))
   (format output-stream "~:[~; {~:*~A}~]~:[~; [~:*~A]~]~:[~; (~:*~A)~]"
-	  (format-value (annotation-price annotation))
+	  (and (annotation-price annotation)
+	       (format-value (annotation-price annotation)))
 	  (and (annotation-date annotation)
 	       (strftime (annotation-date annotation)))
 	  (annotation-tag annotation)))
@@ -2265,7 +2266,7 @@ from the string, for example:
 	 (if keep-tag
 	     (setf (annotation-tag annotation) tag))
 	 (if (commodity-annotation-empty-p annotation)
-	     (get-referent annotation)
+	     (get-referent annotated-commodity)
 	     (make-instance 'annotated-commodity
 			    :referent (get-referent annotated-commodity)
 			    :annotation annotation)))))))
