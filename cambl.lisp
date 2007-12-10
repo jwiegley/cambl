@@ -1862,9 +1862,7 @@ tree than the one found."
     (loop
        with p = root
        with last-found = nil
-       named find-loop
-       finally (return-from find-loop
-		 (and last-found (rbt:node-item last-found)))
+       finally (return (and last-found (rbt:node-item last-found)))
        while (not (rbt:rbt-null p))
        do
        (if (funcall test (funcall (the function key)
