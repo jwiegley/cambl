@@ -1856,8 +1856,9 @@ the stream stops and the invalid character is put back."
 	(rbt:delete-item fixed-time (get-price-history commodity)
 			 :key #'pricing-entry-moment
 			 :test-equal #'local-time= :test #'local-time<)
-      (setf (get-price-history commodity) new-root)
-      node-deleted-p)))
+      (if node-deleted-p
+	  (values (setf (get-price-history commodity) new-root) t)
+	  (values (get-price-history commodity) nil)))))
 
 (defun find-nearest (it root &key (test #'<=) (key #'identity))
   "Find an item in the tree which is closest to IT according to TEST.
@@ -1897,9 +1898,11 @@ tree than the one found."
 		   (rbt:node-item history))
 		 (find-nearest fixed-time history
 			       :key #'pricing-entry-moment
-			       :test #'local-time<))))
-	(values (pricing-entry-price pricing-entry)
-		(pricing-entry-moment pricing-entry))))))
+			       :test #'local-time<=))))
+	(if pricing-entry
+	    (values (pricing-entry-price pricing-entry)
+		    (pricing-entry-moment pricing-entry))
+	    (values nil nil))))))
 
 (defmethod market-value ((annotated-commodity annotated-commodity)
 			 &optional fixed-time)
