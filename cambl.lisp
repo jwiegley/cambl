@@ -300,10 +300,9 @@
 	   format-value
 
 	   exchange-commodity
-	   purchase-commodity
-	   sell-commodity
 
 	   amount-commodity
+	   balance-amounts
 	   balance-first-amount
 	   balance-commodities
 	   balance-commodity-count
@@ -323,6 +322,7 @@
 	   commodity-equal
 	   commodity-equalp
 	   commodity-lessp
+	   commodity-price-history
 	   compare-amounts-visually
 
 	   annotated-commodity-p
@@ -364,12 +364,9 @@
   (default-commodity nil))
 
 (defvar *default-commodity-pool* (make-commodity-pool))
+(defvar *default-display-precision* 3)
 
 ;;;_ + COMMODITY
-
-(defstruct pricing-entry
-  moment
-  price)				; (:type amount)
 
 (defclass commodity ()
   ((symbol :accessor get-symbol :initarg :symbol)
@@ -717,7 +714,7 @@ associated with the given commodity pool.
     ;; it refers to
     (multiple-value-bind (commodity newly-created-p)
 	(if (and symbol
-		 (not (cl:zerop (length (commodity-symbol-name symbol)))))
+		 (not (zerop (length (commodity-symbol-name symbol)))))
 	    (if details
 		(find-annotated-commodity symbol details :pool pool
 					  :create-if-not-exists-p t)
@@ -827,9 +824,9 @@ associated with the given commodity pool.
       (value-round amount)))
 
 (defmethod value-zerop ((rational rational))
-  (cl:zerop rational))
+  (zerop rational))
 (defmethod value-zerop ((amount amount))
-  (cl:zerop (amount-quantity (value-maybe-round amount))))
+  (zerop (amount-quantity (value-maybe-round amount))))
 (defmethod value-zerop ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-zerop (cdr entry))
@@ -838,9 +835,9 @@ associated with the given commodity pool.
   t)
 
 (defmethod value-zerop* ((rational rational))
-  (cl:zerop rational))
+  (zerop rational))
 (defmethod value-zerop* ((amount amount))
-  (cl:zerop (amount-quantity amount)))
+  (zerop (amount-quantity amount)))
 (defmethod value-zerop* ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-zerop* (cdr entry))
@@ -849,9 +846,9 @@ associated with the given commodity pool.
   t)
 
 (defmethod value-minusp ((rational rational))
-  (cl:minusp rational))
+  (minusp rational))
 (defmethod value-minusp ((amount amount))
-  (cl:minusp (amount-quantity (value-maybe-round amount))))
+  (minusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-minusp ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-minusp (cdr entry))
@@ -860,9 +857,9 @@ associated with the given commodity pool.
   t)
 
 (defmethod value-minusp* ((rational rational))
-  (cl:minusp rational))
+  (minusp rational))
 (defmethod value-minusp* ((amount amount))
-  (cl:minusp (amount-quantity amount)))
+  (minusp (amount-quantity amount)))
 (defmethod value-minusp* ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-minusp* (cdr entry))
@@ -871,9 +868,9 @@ associated with the given commodity pool.
   t)
 
 (defmethod value-plusp ((rational rational))
-  (cl:plusp rational))
+  (plusp rational))
 (defmethod value-plusp ((amount amount))
-  (cl:plusp (amount-quantity (value-maybe-round amount))))
+  (plusp (amount-quantity (value-maybe-round amount))))
 (defmethod value-plusp ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-plusp (cdr entry))
@@ -882,9 +879,9 @@ associated with the given commodity pool.
   t)
 
 (defmethod value-plusp* ((rational rational))
-  (cl:plusp rational))
+  (plusp rational))
 (defmethod value-plusp* ((amount amount))
-  (cl:plusp (amount-quantity amount)))
+  (plusp (amount-quantity amount)))
 (defmethod value-plusp* ((balance balance))
   (mapc #'(lambda (entry)
 	    (unless (value-plusp* (cdr entry))
@@ -966,16 +963,16 @@ associated with the given commodity pool.
   "Return -1, 0 or 1 depending on the sign of AMOUNT."
   (etypecase amount
     (rational
-     (if (cl:minusp amount)
+     (if (minusp amount)
 	 -1
-	 (if (cl:plusp amount)
+	 (if (plusp amount)
 	     1
 	     0)))
     (amount
      (let ((quantity (amount-quantity amount)))
-       (if (cl:minusp quantity)
+       (if (minusp quantity)
 	   -1
-	   (if (cl:plusp quantity)
+	   (if (plusp quantity)
 	       1
 	       0))))))
 
@@ -1118,9 +1115,9 @@ associated with the given commodity pool.
 
 (declaim (inline value-lessp value-lessp*))
 (defun value-lessp (left right)
-  (cl:minusp (compare left right)))
+  (minusp (compare left right)))
 (defun value-lessp* (left right)
-  (cl:minusp (compare* left right)))
+  (minusp (compare* left right)))
 
 (declaim (inline value-lesseqp value-lesseqp*))
 (defun value-lesseqp (left right)
@@ -1130,15 +1127,15 @@ associated with the given commodity pool.
 
 (declaim (inline value< value<=))
 (defun value< (left right)
-  (cl:minusp (compare left right)))
+  (minusp (compare left right)))
 (defun value<= (left right)
   (<= (compare left right) 0))
 
 (declaim (inline value-greaterp value-greaterp*))
 (defun value-greaterp (left right)
-  (cl:plusp (compare left right)))
+  (plusp (compare left right)))
 (defun value-greaterp* (left right)
-  (cl:plusp (compare* left right)))
+  (plusp (compare* left right)))
 
 (declaim (inline value-greatereqp value-greatereqp*))
 (defun value-greatereqp (left right)
@@ -1148,7 +1145,7 @@ associated with the given commodity pool.
 
 (declaim (inline value> value>=))
 (defun value> (left right)
-  (cl:plusp (compare left right)))
+  (plusp (compare left right)))
 (defun value>= (left right)
   (>= (compare left right) 0))
 
@@ -1159,7 +1156,7 @@ associated with the given commodity pool.
 
 (defmethod value-abs ((amount amount))
   (assert amount)
-  (if (cl:minusp (amount-quantity amount))
+  (if (minusp (amount-quantity amount))
       (make-amount :commodity (amount-commodity amount)
 		   :quantity (- (amount-quantity amount))
 		   :keep-precision-p (amount-keep-precision-p amount))
@@ -1518,8 +1515,11 @@ If it is greater, this operation has no effect."
 	      (and commodity (commodity-thousand-marks-p commodity))
 	      #\, quotient)
 
-      (unless (and precision (zerop precision))
-	(format output-stream "~v,0,,'0$" (or precision 3) (abs remainder))))
+      (unless (or (and precision (zerop precision))
+		  (zerop quantity))
+	(format output-stream "~v,0,,'0$"
+		(or precision *default-display-precision*)
+		(abs remainder))))
       
     (when (and commodity-symbol
 	       (not (commodity-symbol-prefixed-p commodity-symbol)))
@@ -1539,8 +1539,11 @@ If it is greater, this operation has no effect."
 			line-feed-string)
   (declare (ignore omit-commodity-p full-precision-p latter-width
 		   line-feed-string))
-  ;; jww (2007-12-07): Make the amount of displayed precision configurable
-  (format output-stream "~v,3F" width rational))
+  (if (zerop rational)
+      (format output-stream "~vD" width 0)
+      ;; jww (2007-12-07): Make the amount of displayed precision configurable
+      (format output-stream "~v,vF" width *default-display-precision*
+	      rational)))
 
 (defmethod print-value ((amount amount) &key
 			(output-stream *standard-output*)
@@ -1817,6 +1820,10 @@ the stream stops and the invalid character is put back."
 
 ;;;_  + Current and historical market values (prices) for a commodity
 
+(defstruct pricing-entry
+  moment
+  price)				; (:type amount)
+
 (defun add-price (commodity price &optional fixed-time)
   (declare (type (or commodity annotated-commodity null) commodity))
   (declare (type amount price))
@@ -1830,7 +1837,8 @@ the stream stops and the invalid character is put back."
 	(history (or (get-price-history commodity)
 		     (setf (get-price-history commodity) (rbt:nil-tree)))))
     (multiple-value-bind (new-root node-inserted-or-found item-already-in-p)
-	(rbt:insert-item pricing-entry history :key #'pricing-entry-moment)
+	(rbt:insert-item pricing-entry history :key #'pricing-entry-moment
+			 :test-equal #'local-time= :test #'local-time<)
       (if item-already-in-p
 	  (setf (pricing-entry-price (rbt:node-item node-inserted-or-found))
 		price))
@@ -1846,7 +1854,8 @@ the stream stops and the invalid character is put back."
   (when (get-price-history commodity)
     (multiple-value-bind (new-root node-deleted-p)
 	(rbt:delete-item fixed-time (get-price-history commodity)
-			 :key #'pricing-entry-moment)
+			 :key #'pricing-entry-moment
+			 :test-equal #'local-time= :test #'local-time<)
       (setf (get-price-history commodity) new-root)
       node-deleted-p)))
 
@@ -1858,91 +1867,110 @@ tree than the one found."
   (declare (type rbt:rbt-node root))
   (declare (type function test))
   (declare (type function key))
-  (the (or pricing-entry null)
-    (loop
-       with p = root
-       with last-found = nil
-       finally (return (and last-found (rbt:node-item last-found)))
-       while (not (rbt:rbt-null p))
-       do
-       (if (funcall test (funcall (the function key)
-				  (rbt:node-item p)) it)
-	   (progn
-	     ;; If the current item meets the test, it may be the one we're
-	     ;; looking for.  However, there might be something closer to the
-	     ;; right -- though definitely not to the left.
-	     (setf last-found p p (rbt:right p)))
-	   ;; If the current item does not meet the test, there might be a
-	   ;; candidate to the left -- but definitely not the right.
-	   (setf p (rbt:left p))))))
+  (loop
+     with p = root
+     with last-found = nil
+     finally (return (and last-found (rbt:node-item last-found)))
+     while (not (rbt:rbt-null p)) do
+     (if (funcall test (funcall (the function key)
+				(rbt:node-item p)) it)
+	 ;; If the current item meets the test, it may be the one we're
+	 ;; looking for.  However, there might be something closer to the
+	 ;; right -- though definitely not to the left.
+	 (setf last-found p p (rbt:right p))
+	 ;; If the current item does not meet the test, there might be a
+	 ;; candidate to the left -- but definitely not the right.
+	 (setf p (rbt:left p)))))
 
 (defmethod market-value ((commodity commodity) &optional fixed-time)
   (declare (type (or commodity annotated-commodity null) commodity))
   (declare (type (or fixed-time null) fixed-time))
   ;; jww (2007-12-03): This algorithm needs extensive testing
-  (when commodity
-    (let ((history (commodity-price-history commodity)))
-      (when history
-	(if (null fixed-time)
-	    (progn
-	      (loop
-		 while (not (rbt:rbt-null (rbt:right history)))
-		 do (setf history (rbt:right history)))
-	      (assert history)
-	      (rbt:node-item history))
-	    (find-nearest fixed-time history :key #'pricing-entry-moment))))))
+  (let ((history (commodity-price-history commodity)))
+    (when history
+      (let ((pricing-entry
+	     (if (null fixed-time)
+		 (progn
+		   (loop while (not (rbt:rbt-null (rbt:right history))) do
+			(setf history (rbt:right history)))
+		   (assert history)
+		   (rbt:node-item history))
+		 (find-nearest fixed-time history
+			       :key #'pricing-entry-moment
+			       :test #'local-time<))))
+	(values (pricing-entry-price pricing-entry)
+		(pricing-entry-moment pricing-entry))))))
 
 (defmethod market-value ((annotated-commodity annotated-commodity)
 			 &optional fixed-time)
   (market-value (get-referent annotated-commodity) fixed-time))
 
 (defmethod market-value ((rational rational) &optional fixed-time)
-  (declare (ignore fixed-time))
-  rational)
+  (values rational fixed-time))
 
 (defmethod market-value ((amount amount) &optional fixed-time)
-  (let ((value (market-value (amount-commodity amount) fixed-time)))
+  (multiple-value-bind (value moment)
+      (market-value (amount-commodity amount) fixed-time)
     (if value
-	(value-round (multiply value amount))
-	amount)))
+	(values (multiply value amount) moment)
+	(values amount fixed-time))))
 
 (defmethod market-value ((balance balance) &optional fixed-time)
-  (make-balance :amounts-map
-		(mapcar #'(lambda (cell)
-			    (cons (car cell)
-				  (market-value (cdr cell) fixed-time)))
-			(get-amounts-map balance))))
+  (let ((market-balance 0)
+	earliest latest)
+    (mapc #'(lambda (cell)
+	      (multiple-value-bind (value moment)
+		  (market-value (cdr cell) fixed-time)
+		(setf market-balance (add market-balance value))
+		(if (or (null earliest)
+			(local-time< moment earliest))
+		    (setf earliest moment))
+		(if (or (null latest)
+			(local-time> moment latest))
+		    (setf latest moment))))
+	  (get-amounts-map balance))
+    (values market-balance earliest latest)))
 
 ;;;_  + Exchange a commodity
 
-(defun exchange-commodity (amount price &key (sale nil) (moment nil)
-			   (note nil))
+(defun exchange-commodity (amount &key (total-cost nil) (per-unit-cost nil)
+			   (moment nil) (tag nil))
   (declare (type amount amount))
-  (declare (type amount price))
-  (declare (type boolean sale))
+  (declare (type (or value null) total-cost))
+  (declare (type (or value null) per-unit-cost))
   (declare (type (or fixed-time null) moment))
-  (declare (type (or string null) note))
-  (let ((current-annotation
-	 (and (annotated-commodity-p (amount-commodity amount))
-	      (commodity-annotation (amount-commodity amount))))
-	(per-share-price (divide price amount)))
-    (values
-     (if sale
-	 (and current-annotation
-	      (subtract price
-			(multiply (annotation-price current-annotation)
-				  amount)))
-	 (annotate-commodity
-	  amount
-	  (make-commodity-annotation :price per-share-price
-				     :date  moment
-				     :tag   note))))))
+  (declare (type (or string null) tag))
 
-(defun purchase-commodity (amount price &key (moment nil) (note nil))
-  (exchange-commodity amount price :moment moment :note note))
+  (assert (or (and total-cost (not per-unit-cost))
+	      (and per-unit-cost (not total-cost))))
 
-(defun sell-commodity (amount price &key (moment nil) (note nil))
-  (exchange-commodity amount price :sale t :moment moment :note note))
+  (let* ((commodity (amount-commodity amount))
+	 (current-annotation
+	  (and (annotated-commodity-p commodity)
+	       (commodity-annotation commodity)))
+	 (base-commodity (if (annotated-commodity-p commodity)
+			     (get-referent commodity)
+			     commodity))
+	 (per-unit-cost (or per-unit-cost
+			    (divide total-cost amount)))
+	 (total-cost (or total-cost
+			 (multiply per-unit-cost amount))))
+
+    ;; Add a price history entry for this conversion if we know when it took
+    ;; place
+    (if (and moment (not (commodity-no-market-price-p base-commodity)))
+	(add-price base-commodity per-unit-cost moment))
+
+    ;; returns: ANNOTATED-AMOUNT TOTAL-COST BASIS-COST
+    (values (annotate-commodity
+	     amount
+	     (make-commodity-annotation :price per-unit-cost
+					:date  moment
+					:tag   tag))
+	    total-cost
+	    (if current-annotation
+		(multiply (annotation-price current-annotation) amount)
+		total-cost))))
 
 ;;;_ * COMMODITY-POOL
 

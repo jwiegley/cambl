@@ -41,7 +41,7 @@ very short lists.
 the subsequent immutability of the input data, and the second is an increase
 in functional complexity.  Specifically, while CL:MAPCAR is O(N) for a given
 list, FPROG:APPLY-TO-LIST -- when used to implement a sharing form of MAPCAR,
-such as FPROG:MAPCAR-IF -- has complexity O(1) in the best case, and O(2N) in
+such as FPROG:MAPCAR-IF -- has complexity O(N) in the best case, and O(2N) in
 the worst case when LOOKAHEAD is T, otherwise it is also O(N) (where an
 element to be substituted occurs at the very end of the list).
 
