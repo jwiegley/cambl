@@ -1512,6 +1512,17 @@ If it is greater, this operation has no effect."
       (format-commodity-annotation (commodity-annotation commodity)
 				   :output-stream output-stream)))
 
+(defmethod print-value ((integer integer) &key
+			(output-stream *standard-output*)
+			omit-commodity-p
+			full-precision-p
+			(width nil)
+			latter-width
+			line-feed-string)
+  (declare (ignore omit-commodity-p full-precision-p latter-width
+		   line-feed-string))
+  (format output-stream "~vD" width integer))
+
 (defmethod print-value ((rational rational) &key
 			(output-stream *standard-output*)
 			omit-commodity-p
