@@ -258,9 +258,6 @@
 	   value-plusp
 	   value-plusp*
 
-	   value-truth
-	   value-truth*
-
 	   compare
 	   compare*
 	   sign
@@ -888,21 +885,6 @@ associated with the given commodity pool.
 	      (return-from value-plusp*)))
 	(get-amounts-map balance))
   t)
-
-(defun value-basic-truth (result zerop-test-func)
-  (declare (type function zerop-test-func))
-  (etypecase result
-    (amount (not (funcall zerop-test-func result)))
-    (balance (not (funcall zerop-test-func result)))
-    (rational (not (zerop result)))
-    (string (> (length result) 0))
-    (boolean result)))
-
-(declaim (inline value-truth value-truth*))
-(defun value-truth (result)
-  (value-basic-truth result #'value-zerop))
-(defun value-truth* (result)
-  (value-basic-truth result #'value-zerop*))
 
 ;;;_  + Commodity equality
 
