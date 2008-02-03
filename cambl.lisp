@@ -1,8 +1,8 @@
 ;; -*- mode: lisp -*-
 
-;; cambl.lisp - This is the Commoditized AMounts and BaLances library.
+;; cambl.lisp - Commoditized AMounts and Balances Library.
 
-;;;_* Copyright (c) 2003-2007, John Wiegley.  All rights reserved.
+;;;_* Copyright (c) 2003-2008, John Wiegley.  All rights reserved.
 
 ;; Redistribution and use in source and binary forms, with or without
 ;; modification, are permitted provided that the following conditions are
@@ -33,15 +33,35 @@
 
 ;;;_* Commentary
 
-;; This library aims to provide convenient access to commoditized math.  That
-;; is, math involving numbers with units.  However, unlike scientific units,
-;; this library does not allow the use of "compound" units.  If you divide 1kg
-;; by 1m, you do not get "1 kg/m", but an error.  This is because the intended
-;; use is for situations that do not allow compounded units, such as financial
-;; transactions, and the algorithms have been simplified accordingly.  It also
-;; allows contextual information to be tracked during commodity calculations
-;; -- the time of conversion from one type to another, the rated value at the
-;; time of conversion.
+;; This library provides a convenient facility for working with commoditized
+;; values.  It does not allow compound units -- and so is not suited for
+;; scientific operations -- but does work rather nicely for the purpose of
+;; financial calculations.
+;;
+;; The primary entry point to using this library is the creation of VALUES,
+;; which may be of many different types.  These VALUES are then used as
+;; arguments to a set of basic mathematical OPERATIONS, which also yield
+;; VALUES.  However, the type of the result may not be the same type as either
+;; of the operands.
+;;
+;; For example, let's say you want to create a figure representing 10 US
+;; dollars.  You then add an INTEGER to this amount, the number 200.  The
+;; result of such an operation will be an amalgam of the two units involved:
+;; Dollars, and No-units.  This dual-commodity value is represented as a
+;; BALANCE object, whose printed form shows each commodity amount on its own
+;; line.  For example:
+;;
+;; (let ((value (cambl:amount "$100.00")))
+;;   (princ (cambl:format-value (cambl:add value 200))))
+;;  => 200
+;;     $100.00
+
+;; This library aims to provide convenient access to commoditized math; that
+;; is: math involving commodity units.  Unlike scientific units, there is no
+;; concept of "compound" units.  If you divide 1kg by 1m, you do not get "1
+;; kg/m", but "1 kg" (the unit of the second operand is ignored for
+;; multiplication and division).  The intended use of this library is in
+;; situations such as computing financial transactions.
 
 ;;;_ * Usage: Conventions
 
@@ -1556,10 +1576,9 @@ If it is greater, this operation has no effect."
 	 (commodity-symbol (and (not omit-commodity-p)
 				(commodity-symbol commodity)))
 	 (display-precision
-	  (the fixnum
-	    (unless (or full-precision-p
-			(amount-keep-precision-p amount))
-	      (display-precision commodity)))))
+	  (unless (or full-precision-p
+		      (amount-keep-precision-p amount))
+	    (display-precision commodity))))
     (if width
 	(format output-stream "~v@A" width
 		(with-output-to-string (buffer)
