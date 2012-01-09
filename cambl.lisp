@@ -1816,7 +1816,7 @@ the stream stops and the invalid character is put back."
 	  (if (and left-date (not right-date))
 	      (return nil))
 	  (when (and left-date right-date)
-	    (return (coerce (local-time:local-time< left-date right-date)
+	    (return (coerce (local-time:timestamp< left-date right-date)
 			    'boolean))))
 
 	(let ((left-tag (annotation-tag left-annotation))
@@ -1850,7 +1850,7 @@ the stream stops and the invalid character is put back."
 		     (setf (get-price-history commodity) (rbt:nil-tree)))))
     (multiple-value-bind (new-root node-inserted-or-found item-already-in-p)
 	(rbt:insert-item pricing-entry history :key #'pricing-entry-moment
-			 :test-equal #'local-time= :test #'local-time<)
+			 :test-equal #'timestamp= :test #'timestamp<)
       (if item-already-in-p
 	  (setf (pricing-entry-price (rbt:node-item node-inserted-or-found))
 		price))
@@ -1867,7 +1867,7 @@ the stream stops and the invalid character is put back."
     (multiple-value-bind (new-root node-deleted-p)
 	(rbt:delete-item fixed-time (get-price-history commodity)
 			 :key #'pricing-entry-moment
-			 :test-equal #'local-time= :test #'local-time<)
+			 :test-equal #'timestamp= #'timestamp<)
       (if node-deleted-p
 	  (values (setf (get-price-history commodity) new-root) t)
 	  (values (get-price-history commodity) nil)))))
@@ -1910,7 +1910,7 @@ tree than the one found."
 		   (rbt:node-item history))
 		 (find-nearest fixed-time history
 			       :key #'pricing-entry-moment
-			       :test #'local-time<=))))
+			       :test #'timestamp<=))))
 	(if pricing-entry
 	    (values (pricing-entry-price pricing-entry)
 		    (pricing-entry-moment pricing-entry))
@@ -1938,10 +1938,10 @@ tree than the one found."
 		  (market-value (cdr cell) fixed-time)
 		(setf market-balance (add market-balance value))
 		(if (or (null earliest)
-			(local-time< moment earliest))
+			(timestamp< moment earliest))
 		    (setf earliest moment))
 		(if (or (null latest)
-			(local-time> moment latest))
+			(timestamp> moment latest))
 		    (setf latest moment))))
 	  (get-amounts-map balance))
     (values market-balance earliest latest)))
@@ -2264,7 +2264,7 @@ from the string, for example:
 		  (value= price-a price-b)))
 	 (or (and (null date-a) (null date-b))
 	     (and date-a date-b
-		  (local-time:local-time= date-a date-b)))
+		  (local-time:timestamp= date-a date-b)))
 	 (or (and (null tag-a) (null tag-b))
 	     (and tag-a tag-b
 		  (string= tag-a tag-b))))))
