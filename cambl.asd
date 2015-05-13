@@ -47,5 +47,5 @@ for diagnostic output.")
 (asdf:defsystem :cambl
   :serial t
   :version #.*cambl-version*
-  :depends-on (:red-black :local-time :periods :fprog)
+  :depends-on (:cl-containers :local-time :periods :fprog :alexandria)
   :components ((:file "cambl")))
