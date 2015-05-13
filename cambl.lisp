@@ -251,7 +251,7 @@
 (declaim (optimize (debug 3) (safety 3) (speed 1) (space 0)))
 
 (defpackage :cambl
-  (:use :cl :red-black :local-time :periods)
+  (:use :cl :local-time :periods :alexandria)
   (:export pushend
 
 	   value
@@ -1955,84 +1955,65 @@ the stream stops and the invalid character is put back."
   price)				; (:type amount)
 
 (defun add-price (commodity price &optional fixed-time)
-  (declare (type (or commodity annotated-commodity null) commodity))
-  (declare (type amount price))
-  (declare (type (or fixed-time null) fixed-time))
-  (assert commodity)
-  (if (annotated-commodity-p commodity)
-      (setf commodity (get-referent commodity)))
-  (let ((pricing-entry
-	 (make-pricing-entry :moment (or fixed-time (local-time:now))
-			     :price price))
-	(history (or (get-price-history commodity)
-		     (setf (get-price-history commodity) (rbt:nil-tree)))))
-    (multiple-value-bind (new-root node-inserted-or-found item-already-in-p)
-	(rbt:insert-item pricing-entry history :key #'pricing-entry-moment
-			 :test-equal #'timestamp= :test #'timestamp<)
-      (if item-already-in-p
-	  (setf (pricing-entry-price (rbt:node-item node-inserted-or-found))
-		price))
-      (setf (get-price-history commodity) new-root))
-    price))
+  (flet ((insert-or-replace-pricing-entry (history pricing-entry)
+           (let ((found-item (containers:find-item history pricing-entry)))
+             (if found-item
+                 (setf (containers:element found-item) pricing-entry)
+                 (containers:insert-item history pricing-entry)))))
+    (declare (type (or commodity annotated-commodity null) commodity))
+    (declare (type amount price))
+    (declare (type (or fixed-time null) fixed-time))
+    (assert commodity)
+    (if (annotated-commodity-p commodity)
+        (setf commodity (get-referent commodity)))
+    (prog1 price
+      (insert-or-replace-pricing-entry
+       (or (get-price-history commodity)
+           (setf (get-price-history commodity)
+                 (make-instance 'containers:red-black-tree
+                                :key #'pricing-entry-moment
+                                :test #'timestamp=
+                                :sorter #'timestamp<)))
+       (make-pricing-entry :moment (or fixed-time (local-time:now))
+                           :price price)))))
 
 (defun remove-price (commodity fixed-time)
   (declare (type (or commodity annotated-commodity null) commodity))
   (declare (type fixed-time fixed-time))
   (assert commodity)
-  (if (annotated-commodity-p commodity)
-      (setf commodity (get-referent commodity)))
-  (when (get-price-history commodity)
-    (multiple-value-bind (new-root node-deleted-p)
-	(rbt:delete-item fixed-time (get-price-history commodity)
-			 :key #'pricing-entry-moment
-			 :test-equal #'timestamp= #'timestamp<)
-      (if node-deleted-p
-	  (values (setf (get-price-history commodity) new-root) t)
-	  (values (get-price-history commodity) nil)))))
+  (when-let (history (get-price-history
+                      (if (annotated-commodity-p commodity)
+                          (get-referent commodity)
+                          commodity)))
+    (containers:delete-item
+     history
+     (make-pricing-entry :moment fixed-time))))
 
-(defun find-nearest (it root &key (test #'<=) (key #'identity))
-  "Find an item in the tree which is closest to IT according to TEST.
-For the default, <=, this means no other item will be more less than IT in the
-tree than the one found."
-  (declare (type fixed-time it))
-  (declare (type rbt:rbt-node root))
-  (declare (type function test))
-  (declare (type function key))
-  (loop
-     with p = root
-     with last-found = nil
-     finally (return (and last-found (rbt:node-item last-found)))
-     while (not (rbt:rbt-null p)) do
-     (if (funcall test (funcall (the function key)
-				(rbt:node-item p)) it)
-	 ;; If the current item meets the test, it may be the one we're
-	 ;; looking for.  However, there might be something closer to the
-	 ;; right -- though definitely not to the left.
-	 (setf last-found p p (rbt:right p))
-	 ;; If the current item does not meet the test, there might be a
-	 ;; candidate to the left -- but definitely not the right.
-	 (setf p (rbt:left p)))))
+(defun find-nearest (history fixed-time)
+  (let ((max nil))
+    (catch 'stop
+      (containers:inorder-walk
+       history
+       (lambda (visited)
+         (if (local-time:timestamp<
+              (pricing-entry-moment visited)
+              fixed-time)
+             (setf max visited)
+             (throw 'stop nil)))))
+    max))
 
 (defmethod market-value ((commodity commodity) &optional fixed-time)
   (declare (type (or commodity annotated-commodity null) commodity))
   (declare (type (or fixed-time null) fixed-time))
-  ;; jww (2007-12-03): This algorithm needs extensive testing
-  (let ((history (commodity-price-history commodity)))
-    (when history
-      (let ((pricing-entry
-	     (if (null fixed-time)
-		 (progn
-		   (loop while (not (rbt:rbt-null (rbt:right history))) do
-			(setf history (rbt:right history)))
-		   (assert history)
-		   (rbt:node-item history))
-		 (find-nearest fixed-time history
-			       :key #'pricing-entry-moment
-			       :test #'timestamp<=))))
-	(if pricing-entry
-	    (values (pricing-entry-price pricing-entry)
-		    (pricing-entry-moment pricing-entry))
-	    (values nil nil))))))
+  (when-let (history (commodity-price-history commodity))
+    (let ((pricing-entry
+            (if fixed-time
+                (find-nearest history fixed-time)
+                (containers:last-element history))))
+      (if pricing-entry
+          (values (pricing-entry-price pricing-entry)
+                  (pricing-entry-moment pricing-entry))
+          (values nil nil)))))
 
 (defmethod market-value ((annotated-commodity annotated-commodity)
 			 &optional fixed-time)
