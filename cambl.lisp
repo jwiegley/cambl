@@ -1405,73 +1405,104 @@ associated with the given commodity pool.
 ;;;_  + Function to sort commodities
 
 (defun commodity-lessp (left right)
-  "Return T if commodity LEFT should be sorted before RIGHT."
-  (declare (type (or commodity annotated-commodity null) left))
-  (declare (type (or commodity annotated-commodity null) right))
-  (the boolean
-    (block nil
-      (if (and (null left) right)
-	  (return t))
-      (if (and left (null right))
-	  (return nil))
-      (if (and (null left) (null right))
-	  (return t))
+  "Return T if commodity LEFT should be sorted before RIGHT.
 
-      (unless (commodity-equalp left right)
-	(return (not (null (string-lessp (commodity-name left)
-					 (commodity-name right))))))
+NIL commodities are sorted before non-NIL ones.
 
-      (let ((left-annotated-p (annotated-commodity-p left))
-	    (right-annotated-p (annotated-commodity-p right)))
-	(if (and (not left-annotated-p)
-		 right-annotated-p)
-	    (return t))
-	(if (and left-annotated-p
-		 (not right-annotated-p))
-	    (return nil))
-	(if (and (not left-annotated-p)
-		 (not right-annotated-p))
-	    (return t)))
+Commodities are first sorted by their base commodity names,
+using STRING-LESSP.
 
-      (let ((left-annotation (commodity-annotation left))
-	    (right-annotation (commodity-annotation right)))
+Non-annotated commodities are sorted before annotated ones.
 
-	(let ((left-price (annotation-price left-annotation))
-	      (right-price (annotation-price right-annotation)))
-	  (if (and (not left-price) right-price)
-	      (return t))
-	  (if (and left-price (not right-price))
-	      (return nil))
-	  (if (and left-price right-price)
-	      (if (commodity-equal (amount-commodity left-price)
-				   (amount-commodity right-price))
-		  (return (value< left-price right-price))
-		  ;; Since we have two different amounts, there's really no way
-		  ;; to establish a true sorting order; we'll just do it based
-		  ;; on the numerical values.
-		  (return (< (amount-quantity left-price)
-			     (amount-quantity right-price))))))
+Comparison of annotated commodities is done as follows.
+Those without prices are sorted before those with prices.
+If they both have prices:
 
-	(let ((left-date (annotation-date left-annotation))
-	      (right-date (annotation-date right-annotation)))
-	  (if (and (not left-date) right-date)
-	      (return t))
-	  (if (and left-date (not right-date))
-	      (return nil))
-	  (when (and left-date right-date)
-	    (return (coerce (local-time:timestamp<  left-date right-date)
-			    'boolean))))
+   * If these prices are expressed in the same commodity, sort
+     those prices according to VALUE< (rounding occurs).
 
-	(let ((left-tag (annotation-tag left-annotation))
-	      (right-tag (annotation-tag right-annotation)))
-	  (if (and (not left-tag) right-tag)
-	      (return t))
-	  (if (and left-tag (not right-tag))
-	      (return nil))
-	  (when (and left-tag right-tag)
-	    (return (string-lessp left-tag right-tag)))))
+   * If commodities are different, compare them according to
+     AMOUNT-QUANTITY, without taking into account the relative
+     values of those commodities (btw, no rounding occurs).
+     For example, a 10 USD price would be sorted before a 1000
+     YEN price, even though the second one is equivalent to
+     8 USD (May 2015).
 
-      (return t))))
+If they both lack prices, we sort them by date.
+Commodities without date are sorted before those having dates.
+When both have dates, they are sorted by LOCAL-TIME:TIMESTAMP<.
+
+When they both lack dates, we sort them by tags.
+Commodities without tags are sorted before those having tags.
+Tags are sorted by STRING-LESSP.
+
+Finally, if both annotated commodities do not have tags, they are
+considered equivalent: we unconditionally return NIL.  We also
+return NIL when both commodities are EQ, which includes the case where
+they are both NIL.
+
+Thus, this order is partial. If we sort a list of commodities where
+some commodities X and Y are equivalent w.r.t. this comparison
+function, then the resulting sorted list will have either X before Y
+or Y before X, depending on arbitrary factors, such as the order by
+which elements are sorted.
+
+Since the function unconditionally returns NIL when elements are
+equal, it is possible to use STABLE-SORT to keep control of the
+resulting order.
+"
+  (declare (type (or null commodity) left right))
+  (cond
+
+    ;; Check if arguments are EQ (or both NIL)
+    ((eq left right) nil)
+
+    ;; NIL commodities are sorted before non-NIL ones
+    ((null left) t)
+    ((null right) nil)
+
+    ;; Sort by commodity name
+    ((not (commodity-equalp left right)) (string-lessp
+                                          (commodity-name left)
+                                          (commodity-name right)))
+
+    ;; Non-annotated commodities are sorted before annotated ones
+    ((not (annotated-commodity-p left)) t)
+    ((not (annotated-commodity-p right)) nil)
+
+    ;; Both are annotated
+    (t (let* ((la (commodity-annotation left))
+              (ra (commodity-annotation right))
+              (lprice (annotation-price la))
+              (rprice (annotation-price ra))
+              (ldate (annotation-date la))
+              (rdate (annotation-date ra))
+              (ltag (annotation-tag la))
+              (rtag (annotation-tag ra)))
+         (cond
+           ;; Discriminate by PRICE
+           ((and lprice rprice) (if (commodity-equal
+                                     (amount-commodity lprice)
+                                     (amount-commodity rprice))
+                                    (value< lprice
+                                            rprice)
+                                    (< (amount-quantity lprice)
+                                       (amount-quantity rprice))))
+           (rprice t)
+           (lprice nil)
+
+           ;; Discriminate by DATE
+           ((and ldate rdate) (local-time:timestamp< ldate rdate))
+           (rdate t)
+           (ldate nil)
+
+           ;; Discriminate by TAG
+           ((and ltag rtag) (string-lessp ltag rtag))
+           (rtag t)
+           (ltag nil)
+
+           ;; LEFT and RIGHT are equivalent
+           (t nil))))))
 
 (defun apply-to-balance (balance commodity value function &optional adjustor)
   (let ((amounts-map
