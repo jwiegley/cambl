@@ -29,21 +29,14 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(in-package :cl-user)
+(cl:in-package #:asdf-user)
 
-(defpackage :cambl-test-asd
-  (:use :cl :asdf))
-
-(in-package :cambl-test-asd)
-
-(defvar *cambl-test-version* "4.0.0-pre-0"
-  "A string denoting the current version of CAMBL-TEST.  Used
-for diagnostic output.")
-
-(export '*cambl-test-version*)
-
-(asdf:defsystem :cambl-test
+(defsystem #:cambl-test
   :serial t
-  :version #.*cambl-test-version*
-  :depends-on (:cambl :xlunit)
-  :components ((:file "cambl-test")))
+  :version "4.0.0"
+  :depends-on (:cambl
+               :xlunit
+               :uiop)
+  :components ((:file "cambl-test"))
+  :perform (test-op (o s)
+             (uiop:symbol-call :cambl-test :run-tests)))

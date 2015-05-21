@@ -1,10 +1,12 @@
-;; cambl-test.lisp
+(cl:in-package :cl-user)
 
 (defpackage :cambl-test
   (:use :cl :cambl :xlunit)
-  (:export :cambl-test-suite
-	   :commodity-test-case
-	   :amount-test-case))
+  (:export #:cambl-test-suite
+	   #:commodity-test-case
+	   #:amount-test-case
+           #:run-tests
+           #:latest-test-results))
 
 (in-package :cambl-test)
 
@@ -1166,11 +1168,9 @@
 
     (assert-valid x1)))
 
-(textui-test-run (get-suite commodity-test-case))
-(textui-test-run (get-suite amount-test-case))
+(defvar latest-test-results nil)
 
-(in-package :cl)
-(ignore-errors
- (delete-package :cambl-test))
-
-;; cambl-test.lisp ends here
+(defun run-tests ()
+  (setq latest-test-results 
+        (list (textui-test-run (get-suite commodity-test-case))
+              (textui-test-run (get-suite amount-test-case)))))

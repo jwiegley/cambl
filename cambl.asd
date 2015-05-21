@@ -29,23 +29,15 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(in-package :cl-user)
+(cl:in-package #:asdf-user)
 
-(defpackage :cambl-asd
-  (:use :cl :asdf))
-
-(in-package :cambl-asd)
-
-(defvar *cambl-version* "4.0.0-pre-0"
-  "A string denoting the current version of CAMBL.  Used
-for diagnostic output.")
-
-(export '*cambl-version*)
-
-(pushnew :periods-use-parser *features*)
-
-(asdf:defsystem :cambl
+(defsystem #:cambl
   :serial t
-  :version #.*cambl-version*
-  :depends-on (:cl-containers :local-time :periods :fprog :alexandria)
+  :version "4.0.0"
+  :depends-on (:cl-containers
+               :local-time
+               :periods
+               :fprog
+               :alexandria)
+  :in-order-to ((test-op (test-op :cambl-test)))
   :components ((:file "cambl")))
