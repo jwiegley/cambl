@@ -1359,7 +1359,7 @@ associated with the given commodity pool.
 
 	    ;; If the amount had no commodity at all, always preserve full
 	    ;; precision, as if the user had used `exact-amount'.
-	    quantity)))))
+	    (values quantity precision))))))
 
 (declaim (inline read-amount*))
 (defun read-amount* (in &key (pool *default-commodity-pool*))
@@ -1945,6 +1945,11 @@ the stream stops and the invalid character is put back."
 
 (defmethod display-precision ((amount amount))
   (display-precision (amount-commodity amount)))
+
+(defmethod display-precision ((rational rational))
+  (nth-value 1
+             (amount
+              (prin1-to-string (float rational)))))
 
 ;;;_  + Current and historical market values (prices) for a commodity
 
