@@ -809,7 +809,7 @@
 
       (assert-value-equal
        (amount* "0.0019216115121765559608381226612019501046413574469262")
-       (divide (amount-sans-commodity x6) (amount-sans-commodity x7)))
+       (divide (amount-quantity x6) (amount-quantity x7)))
       ;; Commoditized values, when not dealing with exact-amount arithmetic,
       ;; only preserve the commodity's display precision plus
       ;; *extra-precision*.
@@ -819,7 +819,7 @@
 
       (assert-value-equal
        (amount* "520.39654928343335571379527154924040947271699678158689736256")
-       (divide (amount-sans-commodity x7) (amount-sans-commodity x6)))
+       (divide (amount-quantity x7) (amount-quantity x6)))
       (assert-value-equal
        (amount* "$520.39654928")
        (divide x7 x6)))
