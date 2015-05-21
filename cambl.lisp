@@ -119,7 +119,6 @@
 ;;   value-greatereqp   ; same as value>=
 ;;   value-greatereqp*  ; exact version of value>=
 ;;
-;;   amount-precision   ; return the internal precision of an amount
 ;;   display-precision  ; return the "display" precision for an amount
 ;;                      ; or a commodity
 
@@ -166,7 +165,7 @@
 ;; (this becomes important during division, to guard against fractional losses
 ;; during repeated rounding).
 ;;
-;;   (cambl:amount-precision (cambl:amount "$100.00")) => 2
+;;   (cambl:display-precision (cambl:amount "$100.00")) => 2
 ;;
 ;; CAMBL remembers the greatest precision it has seen thus far, but never
 ;; records a lesser precision.  So if you parse $100.00 and then $100, both
@@ -324,7 +323,6 @@
 	   balance-commodities
 	   balance-commodity-count
 	   commodity-name
-	   amount-precision
 	   amount-keep-precision-p
 	   display-precision
 

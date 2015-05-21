@@ -931,8 +931,8 @@
     (assert-valid x2)))
 
 (define-test fractional-round
-  (let ((x1 (amount "1234.567890")))
-    (assert-value-equal 6 (amount-precision x1))
+  (let ((x1 (amount* "1234.567890")))
+    (assert-value-equal 6 (display-precision x1))
   
     (let ((y7 (value-round x1 7))
 	  (y6 (value-round x1 6))
@@ -943,14 +943,14 @@
 	  (y1 (value-round x1 1))
 	  (y0 (value-round x1 0)))
 
-      (assert-equal 6 (amount-precision y7))
-      (assert-equal 6 (amount-precision y6))
-      (assert-equal 5 (amount-precision y5))
-      (assert-equal 4 (amount-precision y4))
-      (assert-equal 3 (amount-precision y3))
-      (assert-equal 2 (amount-precision y2))
-      (assert-equal 1 (amount-precision y1))
-      (assert-equal 0 (amount-precision y0))
+      (assert-equal 6 (display-precision y7))
+      (assert-equal 6 (display-precision y6))
+      (assert-equal 5 (display-precision y5))
+      (assert-equal 4 (display-precision y4))
+      (assert-equal 3 (display-precision y3))
+      (assert-equal 2 (display-precision y2))
+      (assert-equal 1 (display-precision y1))
+      (assert-equal 0 (display-precision y0))
 
       (assert-value-equal (amount "1234.56789") y7)
       (assert-value-equal (amount "1234.56789") y6)
