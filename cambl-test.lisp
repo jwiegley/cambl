@@ -78,17 +78,10 @@
   ()
   (:documentation "test-case for CAMBL amounts"))
 
-(defvar original-*european-style* nil)
-
 (defmethod set-up ((test amount-test-case))
   ;; Cause the display precision for dollars to be initialized to 2.
-  (setq original-*european-style* *european-style*
-	*european-style* nil)
   (reset-commodity-pool)
   (amount "$1,000.00"))
-
-(defmethod tear-down ((test amount-test-case))
-  (setq *european-style* original-*european-style*))
 
 (defmacro define-test (name &rest body-forms)
   `(def-test-method ,name ((test amount-test-case) :run nil)
@@ -129,25 +122,14 @@
 	(assert-value-equal x12 x13)
 	(assert-equal 2 (display-precision x13))))
 
-    (let ((*european-style* t))
-      (assert-equal "$2.000,00"
-		    (format-value (amount* "$2000")))
-      (assert-equal "0" (format-value (amount "0")))
-      (assert-equal "$0,00" (format-value (amount "$0")))
-      (assert-equal "$2.000,00"
-		    (format-value (amount* "$2,000.00")))
-      (assert-equal "$2.000,00"
-		    (format-value (amount* "$2.000,00"))))
-
-    (let ((*european-style* nil))
-      (assert-equal "$2,000.00"
-		    (format-value (amount* "$2000")))
-      (assert-equal "0" (format-value (amount "0")))
-      (assert-equal "$0.00" (format-value (amount "$0")))
-      (assert-equal "$2,000.00"
-		    (format-value (amount* "$2,000.00")))
-      (assert-equal "$2,000.00"
-		    (format-value (amount* "$2.000,00"))))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2000")))
+    (assert-equal "0" (format-value (amount "0")))
+    (assert-equal "$0,00" (format-value (amount "$0")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2,000.00")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2.000,00")))
 
     (let ((x15 (amount* "$2000"))
 	  (x16 (amount* "$2,000")))
