@@ -90,19 +90,18 @@
 (defmethod tear-down ((test amount-test-case))
   (setq *european-style* original-*european-style*))
 
-(defmacro define-test (name empty &rest body-forms)
-  (declare (ignore empty))
+(defmacro define-test (name &rest body-forms)
   `(def-test-method ,name ((test amount-test-case) :run nil)
      ,@body-forms))
 
-(define-test amount/uncommoditized ()
+(define-test amount/uncommoditized
   (assert-equal "0" (format-value (amount "0")))
   (assert-equal "0.10" (format-value (amount "0.10")))
   (assert-equal "0.10" (format-value (amount ".10")))
   (assert-equal "12.1000000000000" (format-value (amount "12.1000000000000")))
   (assert-equal "12.10000" (format-value (amount* "12.10000"))))
 
-(define-test amount/commoditized ()
+(define-test amount/commoditized
   (assert-equal "$0.00" (format-value (amount "$0")))
   (assert-equal "$0.10" (format-value (amount "$0.10")))
   (assert-equal "$12.10" (format-value (amount* "$12.1000000000000")))
@@ -188,7 +187,7 @@
   (with-input-from-string (in string)
     (funcall function in)))
 
-(define-test read-amount/commoditized ()
+(define-test read-amount/commoditized
   (assert-equal "$0.00" (format-value (read-string #'read-amount "$0")))
   (assert-equal "$0.10" (format-value (read-string #'read-amount "$0.10")))
   (assert-equal "$12.10" (format-value (read-string #'read-amount*
@@ -201,39 +200,39 @@
   (assert-equal "EUR 12.10000"
 		(format-value (read-string #'read-amount* "EUR 12.1"))))
 
-(define-test exact-amount ()
+(define-test exact-amount
   (assert-equal "$0.0000" (format-value (exact-amount "$0.0000")))
   (assert-equal "$0.00" (format-value (amount* "$0.0000"))))
 
-(define-test read-exact-amount ()
+(define-test read-exact-amount
   (assert-equal "$0.0000"
 		(format-value (read-string #'read-exact-amount
 					   "$0.0000"))))
 
-;; (define-test float-to-amount ()
+;; (define-test float-to-amount
 ;;   (assert-equal "0.0" (format-value (float-to-amount 0.0)))
 ;;   (assert-equal "2.10005" (format-value (float-to-amount 2.10005)))
 ;;   (assert-equal "-2.10005" (format-value (float-to-amount -2.10005))))
 
-(define-test integer-to-amount ()
+(define-test integer-to-amount
   (assert-equal "0" (format-value (integer-to-amount 0)))
   (assert-equal "12072349872398572398723598723598723987235"
 		(format-value (integer-to-amount
   12072349872398572398723598723598723987235))))
 
-(define-test copy-amount ()
+(define-test copy-amount
   (let* ((x (amount* "$123.45678"))
 	 (copy (copy-amount x)))
     ;; (assert-condition 'assert-error (assert-equal x copy))
     (assert-value-equal x copy)))
 
-(define-test copy-amount ()
+(define-test copy-amount
   (let* ((x (amount* "$123.45678"))
 	 (copy (copy-value x)))
     ;; (assert-condition 'assert-error (assert-equal x copy))
     (assert-value-equal x copy)))
 
-(define-test value-zerop ()
+(define-test value-zerop
   (assert-true (value-zerop (amount* "$0")))
   (assert-true (value-zerop (amount* "$0.00000000000")))
   (assert-true (value-zerop (amount* "EDU 0")))
@@ -245,7 +244,7 @@
   ;; But it's not *really* zero
   (assert-false (value-zerop* (amount* "$0.0000000000000000000000000000001"))))
 
-(define-test value-plusp ()
+(define-test value-plusp
   (assert-false (value-plusp (amount* "$0")))
   (assert-false (value-plusp (amount* "$0.00000000000")))
   (assert-false (value-plusp (amount* "EDU 0")))
@@ -267,7 +266,7 @@
   ;; But it's not *really* zero
   (assert-true (value-plusp* (amount* "$0.0000000000000000000000000000001"))))
 
-(define-test value-minusp ()
+(define-test value-minusp
   (assert-false (value-minusp (amount* "-$0")))
   (assert-false (value-minusp (amount* "-$0.00000000000")))
   (assert-false (value-minusp (amount* "EDU -0")))
@@ -289,7 +288,7 @@
   ;; But it's not *really* zero
   (assert-true (value-minusp* (amount* "$-0.0000000000000000000000000000001"))))
 
-(define-test equality ()
+(define-test equality
   (let ((x1 123456)
 	(x2 456789)
 	(x3 333333)
@@ -318,7 +317,7 @@
     (assert-valid x5)
     (assert-valid x6)))
 
-(define-test commodity-equality ()
+(define-test commodity-equality
   (let ((x1  (amount "$123.45"))
 	(x2  (amount "-$123.45"))
 	(x3  (amount "$-123.45"))
@@ -351,7 +350,7 @@
     #-ecl (assert-valid x9)
     #-ecl (assert-valid x10)))
 
-(define-test comparisons ()
+(define-test comparisons
   (let ((x1 -123)
 	(x2 123)
 	(x3 (amount "-123.45"))
@@ -379,7 +378,7 @@
     (assert-valid x5)
     (assert-valid x6)))
 
-(define-test commodity-comparisons ()
+(define-test commodity-comparisons
   (let ((x1 (amount "$-123"))
 	(x2 (amount "$123.00"))
 	(x3 (exact-amount "$-123.4544"))
@@ -405,7 +404,7 @@
     (assert-valid x5)
     (assert-valid x6)))
 
-(define-test integer-addition ()
+(define-test integer-addition
   (let ((x1 (amount 123))
 	(y1 (amount 456)))
 
@@ -427,7 +426,7 @@
       (assert-valid y1)
       (assert-valid x4))))
 
-(define-test fractional-addition ()
+(define-test fractional-addition
   (let ((x1 (amount "123.123"))
 	(y1 (amount "456.456")))
 
@@ -449,7 +448,7 @@
       (assert-valid y1)
       (assert-valid x2))))
 
-(define-test commodity-addition ()
+(define-test commodity-addition
   (let ((x1 (amount "$123.45"))
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
@@ -491,7 +490,7 @@
       (assert-valid x6)
       (assert-valid x7))))
 
-(define-test integer-subtraction ()
+(define-test integer-subtraction
   (let ((x1 (amount 123))
 	(y1 (amount 456)))
 
@@ -516,7 +515,7 @@
       (assert-valid x4)
       (assert-valid y4))))
 
-(define-test fractional-subtraction ()
+(define-test fractional-subtraction
   (let ((x1 (amount "123.123"))
 	(y1 (amount "456.456")))
 
@@ -541,7 +540,7 @@
       (assert-valid x2)
       (assert-valid y2))))
 
-(define-test commodity-subtraction ()
+(define-test commodity-subtraction
   (let ((x1 (amount "$123.45"))
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
@@ -612,7 +611,7 @@
     #-ecl (assert-valid x5)
     (assert-valid x6)))
 
-(define-test integer-multiplication ()
+(define-test integer-multiplication
   (let ((x1 (amount 123))
 	(y1 (amount 456)))
 
@@ -642,7 +641,7 @@
     (assert-valid x1)
     (assert-valid y1)))
 
-(define-test fractional-multiplication ()
+(define-test fractional-multiplication
   (let ((x1 (amount "123.123"))
 	(y1 (amount "456.456")))
 
@@ -675,7 +674,7 @@
     (assert-valid x1)
     (assert-valid y1)))
 
-(define-test commodity-multiplication ()
+(define-test commodity-multiplication
   (let ((x1 (amount "$123.12"))
 	(y1 (amount "$456.45"))
 	(x2 (exact-amount "$123.456789"))
@@ -722,7 +721,7 @@
     (assert-valid x4)
     #-ecl (assert-valid x5)))
 
-(define-test integer-division ()
+(define-test integer-division
   (let ((x1 (amount 123))
 	(y1 (amount 456)))
 
@@ -755,7 +754,7 @@
     (assert-valid x1)
     (assert-valid y1)))
 
-(define-test fractional-division ()
+(define-test fractional-division
   (let ((x1 (amount "123.123"))
 	(y1 (amount "456.456")))
 
@@ -785,7 +784,7 @@
     (assert-valid x1)
     (assert-valid y1)))
 
-(define-test commodity-division ()
+(define-test commodity-division
   (let ((x1 (amount "$123.12"))
 	(y1 (amount "$456.45"))
 	(x2 (exact-amount "$123.456789"))
@@ -849,7 +848,7 @@
     (assert-valid x4)
     #-ecl (assert-valid x5)))
 
-(define-test negation ()
+(define-test negation
   (let* ((x1 (amount -123456))
 	 (x3 (amount "-123.456"))
 	 (x5 (amount "-123456"))
@@ -876,7 +875,7 @@
     (assert-valid x8)
     (assert-valid x9)))
 
-(define-test commodity-negation ()
+(define-test commodity-negation
   (let ((x1 (amount "$123.45"))
 	(x2 (amount "-$123.45"))
 	(x3 (amount "$-123.45"))
@@ -929,7 +928,7 @@
     #-ecl (assert-valid x9)
     #-ecl (assert-valid x10)))
 
-(define-test abs ()
+(define-test abs
   (let ((x1 (amount -1234))
 	(x2 (amount 1234)))
 
@@ -939,7 +938,7 @@
     (assert-valid x1)
     (assert-valid x2)))
 
-(define-test commodity-abs ()
+(define-test commodity-abs
   (let ((x1 (amount "$-1234.56"))
 	(x2 (amount "$1234.56")))
 
@@ -949,7 +948,7 @@
     (assert-valid x1)
     (assert-valid x2)))
 
-(define-test fractional-round ()
+(define-test fractional-round
   (let ((x1 (amount "1234.567890")))
     (assert-value-equal 6 (amount-precision x1))
   
@@ -1012,7 +1011,7 @@
 			  (value-round x5 37))
       (assert-value-equal (amount 0) (value-round x5 36)))))
 
-(define-test commodity-round ()
+(define-test commodity-round
   (let ((x1 (exact-amount "$1234.567890")))
     (assert-value-equal (exact-amount "$1234.56789") (value-round x1 6))
     (assert-value-equal (exact-amount "$1234.56789") (value-round x1 5))
@@ -1056,7 +1055,7 @@
     (assert-equal "$12,359.81" (format-value x5))
     (assert-equal "$12,359.8140" (format-value x5 :full-precision-p t))))
 
-(define-test commodity-display-round ()
+(define-test commodity-display-round
   (let ((x1 (amount "$0.85"))
 	(x2 (amount "$0.1")))
 
@@ -1077,7 +1076,7 @@
     (assert-value-equal (exact-amount "$1.1305") x1)
     (assert-equal "$1.13" (format-value x1))))
 
-;; (define-test reduction ()
+;; (define-test reduction
 ;;   (let ((x1 (amount "60s"))
 ;; 	(x2 (amount "600s"))
 ;; 	(x3 (amount "6000s"))
@@ -1096,7 +1095,7 @@
 ;;     (assert-value-equal x4 x10)
 ;;     (assert-equal "100.0h" (format-value (largest-units x4)))))
 
-(define-test sign ()
+(define-test sign
   (let ((x1 (amount "0.0000000000000000000000000000000000001"))
 	(x2 (amount "-0.0000000000000000000000000000000000001"))
 	(x3 (amount "1"))
@@ -1112,7 +1111,7 @@
     (assert-valid x3)
     (assert-valid x4)))
 
-(define-test commodity-sign ()
+(define-test commodity-sign
   (let ((x1 (exact-amount "$0.0000000000000000000000000000000000001"))
 	(x2 (exact-amount "$-0.0000000000000000000000000000000000001"))
 	(x3 (amount "$1"))
@@ -1128,7 +1127,7 @@
     (assert-valid x3)
     (assert-valid x4)))
 
-(define-test truth ()
+(define-test truth
   (let ((x1 (amount "1234"))
 	(x2 (amount "1234.56")))
 
@@ -1138,7 +1137,7 @@
     (assert-valid x1)
     (assert-valid x2)))
 
-(define-test commodity-truth ()
+(define-test commodity-truth
   (let ((x1 (amount "$1234"))
 	(x2 (amount "$1234.56")))
 
@@ -1148,7 +1147,7 @@
     (assert-valid x1)
     (assert-valid x2)))
 
-(define-test for-zero ()
+(define-test for-zero
   (let ((x1 (amount "0.000000000000000000001")))
 
     (assert-true (value-truth x1))
@@ -1158,7 +1157,7 @@
 
     (assert-valid x1)))
 
-(define-test commodity-for-zero ()
+(define-test commodity-for-zero
   (let ((x1 (amount* "$0.000000000000000000001")))
 
     (assert-false (value-truth x1))
