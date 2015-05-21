@@ -191,29 +191,6 @@
 		(format-value (read-string #'read-exact-amount
 					   "$0.0000"))))
 
-;; (define-test float-to-amount
-;;   (assert-equal "0.0" (format-value (float-to-amount 0.0)))
-;;   (assert-equal "2.10005" (format-value (float-to-amount 2.10005)))
-;;   (assert-equal "-2.10005" (format-value (float-to-amount -2.10005))))
-
-(define-test integer-to-amount
-  (assert-equal "0" (format-value (integer-to-amount 0)))
-  (assert-equal "12072349872398572398723598723598723987235"
-		(format-value (integer-to-amount
-  12072349872398572398723598723598723987235))))
-
-(define-test copy-amount
-  (let* ((x (amount* "$123.45678"))
-	 (copy (copy-amount x)))
-    ;; (assert-condition 'assert-error (assert-equal x copy))
-    (assert-value-equal x copy)))
-
-(define-test copy-amount
-  (let* ((x (amount* "$123.45678"))
-	 (copy (copy-value x)))
-    ;; (assert-condition 'assert-error (assert-equal x copy))
-    (assert-value-equal x copy)))
-
 (define-test value-zerop
   (assert-true (value-zerop (amount* "$0")))
   (assert-true (value-zerop (amount* "$0.00000000000")))
@@ -1149,34 +1126,16 @@
     (assert-valid x1)
     (assert-valid x2)))
 
-(define-test commodity-truth
-  (let ((x1 (amount "$1234"))
-	(x2 (amount "$1234.56")))
-
-    (assert-true (value-truth x1))
-    (assert-true (value-truth x2))
-
-    (assert-valid x1)
-    (assert-valid x2)))
-
 (define-test for-zero
   (let ((x1 (amount "0.000000000000000000001")))
-
-    (assert-true (value-truth x1))
-    (assert-true (value-truth* x1))
     (assert-false (value-zerop x1))
     (assert-false (value-zerop* x1))
-
     (assert-valid x1)))
 
 (define-test commodity-for-zero
   (let ((x1 (amount* "$0.000000000000000000001")))
-
-    (assert-false (value-truth x1))
-    (assert-true (value-truth* x1))
     (assert-true (value-zerop x1))
     (assert-false (value-zerop* x1))
-
     (assert-valid x1)))
 
 (defvar latest-test-results nil)
