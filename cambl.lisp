@@ -312,6 +312,15 @@
 	   multiply
 	   divide
 
+           value-abs*
+	   value-maybe-round*
+	   value-round*
+	   negate*
+	   add*
+	   subtract*
+	   multiply*
+	   divide*
+
 	   print-value
 	   format-value
 
@@ -2342,6 +2351,28 @@ from the string, for example:
 	(if (= 1 (length (get-amounts-map stripped-balance)))
 	    (cdar (get-amounts-map stripped-balance))
 	    stripped-balance))))
+
+(macrolet
+    ((define-mutable-variants (&body ops)
+       `(progn
+          ,@(loop for (op arg-names) in ops
+                  collect
+                  `(defmacro ,(alexandria:symbolicate op "*")
+                     ,arg-names
+                     ,(format nil "Expands into ~A"
+                              `(setf ,(car arg-names)
+                                     (,op ,@arg-names)))
+                     `(setf ,,(car arg-names)
+                            (,',op ,,@arg-names)))))))
+  (define-mutable-variants
+    (add (x y))
+    (subtract (x y))
+    (multiply (x y))
+    (divide (x y))
+    (negate (value))
+    (value-abs (value))
+    (value-round (value))
+    (value-maybe-round (value))))
 
 (provide 'cambl)
 
