@@ -32,8 +32,12 @@
 (cl:in-package #:asdf-user)
 
 (defsystem #:cambl
-  :serial t
+  :description "A library for working with financial amounts involving multiple commodities."
+  :author "Johh Wiegley <jwiegley@gmail.com>"
+  :maintainer "Christophe Junke <junke.christophe@gmail.com>"
+  :license "BSD-3"
   :version "4.0.0"
+  :serial t
   :depends-on (:cl-containers
                :local-time
                :periods
