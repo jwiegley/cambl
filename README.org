@@ -1,0 +1,35 @@
+* CAMBL
+
+*Commoditized Amounts and Balances*\\
+
+This library provides a convenient facility for working with commoditized
+values.  It does not allow compound units -- and so is not suited for
+scientific operations -- but does work rather nicely for the purpose of
+financial calculations.
+
+The primary entry point to using this library is the creation of VALUES,
+which may be of many different types.  These VALUES are then used as
+arguments to a set of basic mathematical OPERATIONS, which also yield
+VALUES.  However, the type of the result may not be the same type as either
+of the operands.
+
+For example, let's say you want to create a figure representing 10 US
+dollars.  You then add an INTEGER to this amount, the number 200.  The
+result of such an operation will be an amalgam of the two units involved:
+Dollars, and No-units.  This dual-commodity value is represented as a
+BALANCE object, whose printed form shows each commodity amount on its own
+line.  For example:
+
+#+BEGIN_SRC lisp
+(let ((value (cambl:amount "$100.00")))
+    (princ (cambl:format-value (cambl:add value 200))))
+  => 200
+     $100.00
+#+END_SRC
+
+This library aims to provide convenient access to commoditized math; that
+is: math involving commodity units.  Unlike scientific units, there is no
+concept of "compound" units.  If you divide 1kg by 1m, you do not get "1
+kg/m", but "1 kg" (the unit of the second operand is ignored for
+multiplication and division).  The intended use of this library is in
+situations such as computing financial transactions.
