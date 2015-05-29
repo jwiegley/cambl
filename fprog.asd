@@ -29,20 +29,13 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(in-package :cl-user)
-
-(defpackage :fprog-asd
-  (:use :cl :asdf))
-
-(in-package :fprog-asd)
-
-(defvar *fprog-version* "1.0.0"
-  "A string denoting the current version of FPROG.  Used
-for diagnostic output.")
-
-(export '*fprog-version*)
+(cl:in-package :asdf-user)
 
 (asdf:defsystem :fprog
+  :description "Functional programming utilities: iteration over immutable lists sharing identical sublists."
+  :author "Johh Wiegley <jwiegley@gmail.com>"
+  :maintainer "Christophe Junke <junke.christophe@gmail.com>"
+  :license "BSD-3"
   :serial t
-  :version #.*fprog-version*
+  :version "1.0.0"
   :components ((:file "fprog")))
