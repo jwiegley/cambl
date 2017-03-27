@@ -29,18 +29,15 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(cl:in-package #:asdf-user)
-
-(defsystem #:cambl-test
+(defsystem "cambl-test"
   :description "Test system for CAMBL."
   :author "Johh Wiegley <jwiegley@gmail.com>"
   :maintainer "Christophe Junke <junke.christophe@gmail.com>"
   :license "BSD-3"
   :version "4.0.0"
   :serial t
-  :depends-on (:cambl
-               :xlunit
-               :uiop)
+  :depends-on ("cambl"
+               "xlunit"
+               "uiop")
   :components ((:file "cambl-test"))
-  :perform (test-op (o s)
-             (uiop:symbol-call :cambl-test :run-tests)))
+  :perform (test-op (o s) (symbol-call :cambl-test :run-tests)))

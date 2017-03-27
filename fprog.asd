@@ -29,9 +29,7 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(cl:in-package :asdf-user)
-
-(asdf:defsystem :fprog
+(defsystem "fprog"
   :description "Functional programming utilities: iteration over immutable lists sharing identical sublists."
   :author "Johh Wiegley <jwiegley@gmail.com>"
   :maintainer "Christophe Junke <junke.christophe@gmail.com>"
