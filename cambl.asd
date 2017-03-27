@@ -29,19 +29,17 @@
 ;; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 ;; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(cl:in-package #:asdf-user)
-
-(defsystem #:cambl
+(defsystem "cambl"
   :description "A library for working with financial amounts involving multiple commodities."
   :author "Johh Wiegley <jwiegley@gmail.com>"
   :maintainer "Christophe Junke <junke.christophe@gmail.com>"
   :license "BSD-3"
   :version "4.0.0"
   :serial t
-  :depends-on (:cl-containers
-               :local-time
-               :periods
-               :fprog
-               :alexandria)
-  :in-order-to ((test-op (test-op :cambl-test)))
+  :depends-on ("cl-containers"
+               "local-time"
+               "periods"
+               "fprog"
+               "alexandria")
+  :in-order-to ((test-op (test-op "cambl-test")))
   :components ((:file "cambl")))
