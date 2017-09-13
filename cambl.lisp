@@ -1702,16 +1702,17 @@ associated with the given commodity pool.
     (multiple-value-bind (quotient remainder)
 	(truncate quantity)
 
-      (format output-stream "~:[~,,vD~;~,,v:D~]"
+      (format output-stream "~@[~a~]~:[~,,vD~;~,,v:D~]"
+              (when (and (zerop quotient) (minusp remainder)) #\-)
 	      (and commodity (commodity-thousand-marks-p commodity))
 	      #\, quotient)
 
       (unless (or (and precision (zerop precision))
 		  (zerop quantity))
-	(format output-stream "~v,0,,'0$"
-		(or precision *default-display-precision*)
-		(abs remainder))))
-      
+        (let* ((p (or precision *default-display-precision*))
+               (r (truncate (* (abs remainder) (expt 10 p)))))
+          (format output-stream ".~v,'0D" p r))))
+
     (when (and commodity-symbol
 	       (not (commodity-symbol-prefixed-p commodity-symbol)))
       (maybe-gap)
