@@ -86,10 +86,10 @@
 ;;   format-value       ; format a value to a string
 ;;   print-value        ; print a value to a stream
 ;;
-;;   add[*]             ; perform math using values; the values are
-;;   subtract[*]        ; changed as necessary to preserve information
-;;   multiply[*]        ; (adding two amounts may result in a balance)
-;;   divide[*]          ; the * versions change the first argument.
+;;   add                ; perform math using values; the values are
+;;   subtract           ; changed as necessary to preserve information
+;;   multiply           ; (adding two amounts may result in a
+;;   divide             ; balance).
 ;;
 ;;   value-zerop        ; would the value display as zero?
 ;;   value-zerop*       ; is the value truly zero?
@@ -1650,7 +1650,9 @@ associated with the given commodity pool.
 ;;;_   : Division
 
 (defmethod divide ((left rational) (right rational))
-  (/ left right))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (/ left right)))
 
 (defmethod divide ((left rational) (right amount))
   (divide right left))
@@ -1659,15 +1661,19 @@ associated with the given commodity pool.
   (divide right left))
 
 (defmethod divide ((left amount) (right rational))
-  (make-amount :commodity (amount-commodity left)
-	       :quantity (/ (amount-quantity left) right)
-	       :keep-precision-p (amount-keep-precision-p left)))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (make-amount :commodity (amount-commodity left)
+                   :quantity (/ (amount-quantity left) right)
+                   :keep-precision-p (amount-keep-precision-p left))))
 
 (defmethod divide ((left amount) (right amount))
-  (make-amount
-   :commodity (amount-commodity left)
-   :quantity (/ (amount-quantity left) (amount-quantity right))
-   :keep-precision-p (amount-keep-precision-p left)))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (make-amount
+       :commodity (amount-commodity left)
+       :quantity (/ (amount-quantity left) (amount-quantity right))
+       :keep-precision-p (amount-keep-precision-p left))))
 
 (defun divide-in-balance (balance commodity value)
   (transform-balance balance
@@ -1679,10 +1685,14 @@ associated with the given commodity pool.
 		     :first-only t))
 
 (defmethod divide ((left balance) (right rational))
-  (divide-in-balance left nil right))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (divide-in-balance left nil right)))
 
 (defmethod divide ((left balance) (right amount))
-  (divide-in-balance left (amount-commodity right) right))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (divide-in-balance left (amount-commodity right) right)))
 
 ;;;_ * BALANCE specific
 
@@ -2212,7 +2222,7 @@ from the string, for example:
       (let ((annotated-commodity
 	     (find-annotated-commodity referent details
 				       :create-if-not-exists-p t)))
-	(let ((tmp (copy-amount amount)))
+	(let ((tmp (copy-amount amount))) ;; TODO: copy-amount does not exist anymore
 	  (setf (amount-commodity tmp) annotated-commodity)
 	  tmp)))))
 
