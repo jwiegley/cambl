@@ -1031,7 +1031,7 @@
     (assert-value-equal (amount "$-9877") (value-round x4 0)))
 
   (let ((x5 (amount "$123.45")))
-    (setf x1 (multiply x5 (amount "100.12")))
+    (setf x5 (multiply x5 (amount "100.12")))
 
     (assert-value-equal (exact-amount "$12359.814") x5)
     (assert-equal "$12,359.81" (format-value x5))
