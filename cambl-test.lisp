@@ -15,15 +15,15 @@
   (:documentation "test-case for CAMBL commodities"))
 
 (defmacro assert-valid (object)
-  `(assert ,object))
+  `(assert-true ,object))
 (defmacro assert-value-equal (left right)
-  `(assert (value-equal ,left ,right)))
+  `(assert-true (value-equal ,left ,right)))
 (defmacro assert-value-equalp (left right)
-  `(assert (value= ,left ,right)))
+  `(assert-true (value= ,left ,right)))
 (defmacro assert-value-not-equal (left right)
-  `(assert (value-not-equal ,left ,right)))
+  `(assert-true (value-not-equal ,left ,right)))
 (defmacro assert-value-not-equalp (left right)
-  `(assert (value/= ,left ,right)))
+  `(assert-true (value/= ,left ,right)))
 
 (def-test-method test-price-history ((test commodity-test-case) :run nil)
   ;; ptime jan17_07    = parse_datetime("2007/01/17 00:00:00");
