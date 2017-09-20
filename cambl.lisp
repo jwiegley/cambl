@@ -1655,7 +1655,11 @@ associated with the given commodity pool.
       (/ left right)))
 
 (defmethod divide ((left rational) (right amount))
-  (divide right left))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (make-amount :commodity (amount-commodity right)
+                   :quantity (/ left (amount-quantity right))
+                   :keep-precision-p (amount-keep-precision-p right))))
 
 (defmethod divide ((left rational) (right balance))
   (divide right left))
