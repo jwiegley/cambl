@@ -289,9 +289,9 @@
 	#-ecl (x10 (amount "-123.45€")))
 
     (assert-true (value/= x1 x2))
-    (assert-condition 'amount-error (value/= x1 x4))
-    (assert-condition 'amount-error (value/= x1 x7))
-    #-ecl (assert-condition 'amount-error (value/= x1 x9))
+    (assert-true (value/= x1 x4))
+    (assert-true (value/= x1 x7))
+    #-ecl (assert-true (value/= x1 x9))
     (assert-true (value= x2 x3))
     (assert-true (value/= x4 x5))
     (assert-true (value= x5 x6))
@@ -353,7 +353,7 @@
     (assert-false (value= x3 x5))
     (assert-true (value< x3 x1))
     (assert-true (value< x3 x4))
-    (assert-condition 'amount-error (value= x6 x7))
+    (assert-false (value= x6 x7))
     (assert-condition 'amount-error (value< x6 x7))
 
     (assert-valid x1)
