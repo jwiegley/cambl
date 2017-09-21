@@ -122,13 +122,13 @@
 	(assert-value-equal x12 x13)
 	(assert-equal 2 (display-precision x13))))
 
-    (assert-equal "$2.000,00"
+    (assert-equal "$2,000.00"
                   (format-value (amount* "$2000")))
     (assert-equal "0" (format-value (amount "0")))
-    (assert-equal "$0,00" (format-value (amount "$0")))
-    (assert-equal "$2.000,00"
+    (assert-equal "$0.00" (format-value (amount "$0")))
+    (assert-equal "$2,000.00"
                   (format-value (amount* "$2,000.00")))
-    (assert-equal "$2.000,00"
+    (assert-equal "$2,000.00"
                   (format-value (amount* "$2.000,00")))
 
     (let ((x15 (amount* "$2000"))
