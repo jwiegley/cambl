@@ -89,18 +89,23 @@
 
 (define-test amount/uncommoditized
   (assert-equal "0" (format-value (amount "0")))
-  (assert-equal "0.10" (format-value (amount "0.10")))
-  (assert-equal "0.10" (format-value (amount ".10")))
-  (assert-equal "12.1000000000000" (format-value (amount "12.1000000000000")))
-  (assert-equal "12.10000" (format-value (amount* "12.10000"))))
+  (assert-equal "0.100" (format-value (amount "0.10")))
+  (assert-equal "0.100" (format-value (amount ".10")))
+  (assert-equal "12.100" (format-value (amount "12.1000000000000")))
+  (assert-equal "12.100" (format-value (amount* "12.10000"))))
 
 (define-test amount/commoditized
   (assert-equal "$0.00" (format-value (amount "$0")))
   (assert-equal "$0.10" (format-value (amount "$0.10")))
+  (assert-equal "$-0.50" (format-value (amount "$-0.5")))
   (assert-equal "$12.10" (format-value (amount* "$12.1000000000000")))
   (assert-equal "$12.10" (format-value (amount* "$12.10000")))
   (assert-equal "$ 12.10" (format-value (amount "$ 12.10")))
   (assert-equal "$12.10" (format-value (amount "$12.10")))
+  (assert-equal "$2.00" (format-value (amount* "$1.9999999999")))
+  (assert-equal "$1.9999999999" (format-value (amount* "$1.9999999999") :full-precision-p t))
+  (assert-equal "$-2.00" (format-value (amount* "$-1.9999999999")))
+  (assert-equal "$-1.9999999999" (format-value (amount* "$-1.9999999999") :full-precision-p t))
 
   (assert-equal "DX 12.10001" (format-value (amount "DX 12.10001")))
   (assert-equal "DX 12.10000" (format-value (amount* "DX 12.1")))
@@ -688,27 +693,27 @@
     (assert-value-equal (amount "0") (divide (amount "0") x1))
     (assert-value-equal (amount "0") (divide 0 x1))
     (assert-value-equal x1 (divide x1 1))
-    (assert-value-equal (amount "0.008130") (divide (amount "1") x1))
-    (assert-value-equal (amount "0.008130") (divide 1 x1))
+    (assert-value-equal (amount "0.008130") (value-round (divide (amount "1") x1) 6))
+    (assert-value-equal (amount "0.008130") (value-round (divide 1 x1) 6))
     (assert-value-equal (negate x1) (divide x1 -1))
-    (assert-value-equal (negate (amount "0.008130")) (divide (amount "-1") x1))
-    (assert-value-equal (negate (amount "0.008130")) (divide -1 x1))
-    (assert-value-equal (amount "0.269737") (divide x1 y1))
-    (assert-value-equal (amount "3.707317") (divide y1 x1))
-    (assert-value-equal (amount "0.269737") (divide x1 456))
-    (assert-value-equal (amount "3.707317") (divide (amount "456") x1))
-    (assert-value-equal (amount "3.707317") (divide 456 x1))
+    (assert-value-equal (negate (amount "0.008130")) (value-round (divide (amount "-1") x1) 6))
+    (assert-value-equal (negate (amount "0.008130")) (value-round (divide -1 x1) 6))
+    (assert-value-equal (amount "0.269737") (value-round (divide x1 y1) 6))
+    (assert-value-equal (amount "3.707317") (value-round (divide y1 x1) 6))
+    (assert-value-equal (amount "0.269737") (value-round (divide x1 456) 6))
+    (assert-value-equal (amount "3.707317") (value-round (divide (amount "456") x1) 6))
+    (assert-value-equal (amount "3.707317") (value-round (divide 456 x1) 6))
 
     (setf x1 (divide x1 (amount "456")))
-    (assert-value-equal (amount "0.269737") x1)
+    (assert-value-equal (amount "0.269737") (value-round x1 6))
     (setf x1 (divide x1 456))
-    (assert-value-equal (amount "0.00059152850877193") x1)
+    (assert-value-equal (amount "0.00059152816251154") (value-round x1 17))
 
     (let ((x4 (amount "123456789123456789123456789"))
 	  (y4 (amount "56")))
 
       (assert-value-equal (amount "1") (divide x4 x4))
-      (assert-value-equal (amount "2204585520061728377204585.517857") (divide x4 y4)))
+      (assert-value-equal (amount "2204585520061728377204585.517857") (value-round (divide x4 y4) 6)))
 
     (assert-valid x1)
     (assert-valid y1)))
@@ -718,27 +723,27 @@
 	(y1 (amount "456.456")))
 
     (assert-condition 'amount-error (divide x1 0))
-    (assert-value-equal (amount "0.00812195934") (divide (amount "1.0") x1))
+    (assert-value-equal (amount "0.00812195934") (value-round (divide (amount "1.0") x1) 11))
     (assert-value-equal x1 (divide x1 (amount "1.0")))
     (assert-value-equal (negate x1) (divide x1 (amount "-1.0")))
-    (assert-value-equal (negate (amount "0.00812195934")) (divide (amount "-1.0") x1))
-    (assert-value-equal (amount "0.269736842105263") (divide x1 y1))
-    (assert-value-equal (amount "3.707317073170732") (divide y1 x1))
-    (assert-value-equal (amount "0.269736842105263") (divide x1 (amount "456.456")))
-    (assert-value-equal (amount "3.707317073170732") (divide (amount "456.456") x1))
+    (assert-value-equal (negate (amount "0.00812195934")) (value-round (divide (amount "-1.0") x1) 11))
+    (assert-value-equal (amount "0.269736842105263") (value-round (divide x1 y1) 15))
+    (assert-value-equal (amount "3.707317073170732") (value-round (divide y1 x1) 15))
+    (assert-value-equal (amount "0.269736842105263") (value-round (divide x1 (amount "456.456")) 15))
+    (assert-value-equal (amount "3.707317073170732") (value-round (divide (amount "456.456") x1) 15))
 
     (setf x1 (divide x1 (amount "456.456")))
-    (assert-value-equal (amount "0.269736842105263") x1)
+    (assert-value-equal (amount "0.269736842105263") (value-round x1 15))
     (setf x1 (divide x1 (amount "456.456")))
-    (assert-value-equal (amount "0.000590937225286255411255411255411255411") x1)
+    (assert-value-equal (amount "0.000590937225286255757169884593707308389") (value-round x1 39))
     (setf x1 (divide x1 456))
-    (assert-value-equal (amount "0.000001295914967733016252753094858358016252192982456140350877192982456140350877192982") x1)
+    (assert-value-equal (amount "0.000001295914967733017011337466214270413133221122723965703991946884496818889587514752") (value-round x1 84))
 
     (let ((x4 (amount "1234567891234567.89123456789"))
 	  (y4 (amount "56.789")))
       (assert-value-equal (amount "1.0") (divide x4 x4))
       (assert-value-equal (amount "21739560323910.7554497273748437197344556164046")
-			  (divide x4 y4)))
+			  (value-round (divide x4 y4) 31)))
   
     (assert-valid x1)
     (assert-valid y1)))
@@ -755,29 +760,29 @@
     (assert-true (value-zerop (divide 0 x1)))
     (assert-value-equal (amount "$0.00") (divide 0 x1))
     (assert-value-equal x1 (divide x1 1))
-    (assert-value-equal (exact-amount "$0.00812216") (divide 1 x1))
+    (assert-value-equal (exact-amount "$0.00812216") (value-round (divide 1 x1) 8))
     (assert-value-equal (negate x1) (divide x1 -1))
-    (assert-value-equal (exact-amount "$-0.00812216") (divide -1 x1))
-    (assert-value-equal (exact-amount "$0.26973382") (divide x1 y1))
+    (assert-value-equal (exact-amount "$-0.00812216") (value-round (divide -1 x1) 8))
+    (assert-value-equal (exact-amount "$0.26973382") (value-round (divide x1 y1) 8))
     (assert-equal "$0.27" (format-value (divide x1 y1)))
-    (assert-value-equal (exact-amount "$3.70735867") (divide y1 x1))
+    (assert-value-equal (exact-amount "$3.70735867") (value-round (divide y1 x1) 8))
     (assert-equal "$3.71" (format-value (divide y1 x1)))
 
     ;; Internal amounts retain their precision even when being
     ;; converted to strings
-    (assert-value-equal (exact-amount "$0.99727201") (divide x1 x2))
-    (assert-value-equal (exact-amount "$1.00273545321637426901") (divide x2 x1))
+    (assert-value-equal (exact-amount "$0.99727201") (value-round (divide x1 x2) 8))
+    (assert-value-equal (exact-amount "$1.00273545321637426901") (value-round (divide x2 x1) 20))
     (assert-equal "$1.00" (format-value (divide x1 x2)))
-    (assert-equal "$1.00273545321637426901" (format-value (divide x2 x1)))
+    (assert-equal "$1.002735453216374" (format-value (divide x2 x1)))
 
     (setf x1 (divide x1 (amount "123.12")))
     (assert-value-equal (exact-amount "$1.00") x1)
     (assert-equal "$1.00" (format-value x1))
     (setf x1 (divide x1 (amount "123.12")))
-    (assert-value-equal (exact-amount "$0.00812216") x1)
+    (assert-value-equal (exact-amount "$0.00812216") (value-round x1 8))
     (assert-equal "$0.01" (format-value x1))
     (setf x1 (divide x1 123))
-    (assert-value-equal (exact-amount "$0.00006603") x1)
+    (assert-value-equal (exact-amount "$0.00006603") (value-round x1 8))
     (assert-equal "$0.00" (format-value x1))
 
     (let ((x6 (amount* "$237235987235987.98723987235978"))
@@ -786,20 +791,20 @@
 
       (assert-value-equal
        (amount* "0.0019216115121765559608381226612019501046413574469262")
-       (divide (amount-quantity x6) (amount-quantity x7)))
+       (value-round (divide (amount-quantity x6) (amount-quantity x7)) 52))
       ;; Commoditized values, when not dealing with exact-amount arithmetic,
       ;; only preserve the commodity's display precision plus
       ;; *extra-precision*.
       (assert-value-equal
        (amount* "$0.00192161")
-       (divide x6 x7))
+       (value-round (divide x6 x7) 8))
 
       (assert-value-equal
        (amount* "520.39654928343335571379527154924040947271699678158689736256")
-       (divide (amount-quantity x7) (amount-quantity x6)))
+       (value-round (divide (amount-quantity x7) (amount-quantity x6)) 56))
       (assert-value-equal
        (amount* "$520.39654928")
-       (divide x7 x6)))
+       (value-round (divide x7 x6) 8)))
 
     (assert-valid x1)
     (assert-valid x2)
@@ -909,8 +914,8 @@
 
 (define-test fractional-round
   (let ((x1 (amount "1234.567890")))
-    (assert-value-equal 6 (amount-precision x1))
-  
+    (assert-value-equal 5 (amount-precision x1))
+
     (let ((y7 (value-round x1 7))
 	  (y6 (value-round x1 6))
 	  (y5 (value-round x1 5))
@@ -920,8 +925,8 @@
 	  (y1 (value-round x1 1))
 	  (y0 (value-round x1 0)))
 
-      (assert-equal 6 (amount-precision y7))
-      (assert-equal 6 (amount-precision y6))
+      (assert-equal 5 (amount-precision y7))
+      (assert-equal 5 (amount-precision y6))
       (assert-equal 5 (amount-precision y5))
       (assert-equal 4 (amount-precision y4))
       (assert-equal 3 (amount-precision y3))
@@ -968,7 +973,7 @@
     (let ((x5 (amount "0.0000000000000000000000000000000000001")))
       (assert-value-equal (amount "0.0000000000000000000000000000000000001")
 			  (value-round x5 37))
-      (assert-value-equal (amount 0) (value-round x5 36)))))
+      (assert-value-equal (amount "0") (value-round x5 36)))))
 
 (define-test commodity-round
   (let ((x1 (exact-amount "$1234.567890")))
