@@ -86,10 +86,10 @@
 ;;   format-value       ; format a value to a string
 ;;   print-value        ; print a value to a stream
 ;;
-;;   add[*]             ; perform math using values; the values are
-;;   subtract[*]        ; changed as necessary to preserve information
-;;   multiply[*]        ; (adding two amounts may result in a balance)
-;;   divide[*]          ; the * versions change the first argument.
+;;   add                ; perform math using values; the values are
+;;   subtract           ; changed as necessary to preserve information
+;;   multiply           ; (adding two amounts may result in a
+;;   divide             ; balance).
 ;;
 ;;   value-zerop        ; would the value display as zero?
 ;;   value-zerop*       ; is the value truly zero?
@@ -153,7 +153,7 @@
 ;; commodity should be prefixed to the amount, and that it gets connected to
 ;; the amount.  This commodity was used without any "thousand marks" (i.e.,
 ;; $1000.00 vs $1,000.00), and it has a maximum display precision of TWO
-;; observed so far.  If we print sach an amount, we'll see the same style as
+;; observed so far.  If we print such an amount, we'll see the same style as
 ;; was input:
 ;;
 ;;   (cambl:format-value (cambl:amount "$100.00")) => "$100.00"
@@ -213,8 +213,20 @@
 ;;   read-amount*
 ;;   read-exact-amount
 ;;
+;; Internally, an amount's quantity is stored as a rational number,
+;; and therefore has a perfect precision. The internal precision field
+;; of an amount tries to keep track of the number of decimals to
+;; display when printing a value with the FULL-PRECISION-P option.
+;;
+;; By default, uncommoditized amounts (which are in fact just rational
+;; numbers), are displayed with a precision of 3. This can be changed
+;; by setting CAMBL:*DEFAULT-DISPLAY-PRECISION*.
+;; When they are used in math operations, their considered internal
+;; precision to compute the result's internal precision is at most
+;; CAMBL:*EXTRA-PRECISION* (which is 6 by default).
+;;
 ;; NOTE: The KEEP-PRECISION-P property of an amount carries through any math
-;; operations involving that amount, so that the final result is ealways
+;; operations involving that amount, so that the final result is always
 ;; displayed using its own internal percision.
 ;;
 ;; The point of all this is that amounts are displayed as the user expects
@@ -226,7 +238,7 @@
 ;;                              (cambl:amount "50000000")))
 ;;
 ;;   (cambl:format-value *tmp* :full-precision-p t) =>
-;;     "$0.000002000000000"
+;;     "$0.0000020000000000"
 ;;   (cambl:format-value *tmp*) => "$0.00"
 ;;
 ;; You'll notice here that the amount displayed is not $0.00000200000000002.
@@ -327,6 +339,8 @@
 	   amount-precision
 	   amount-keep-precision-p
 	   display-precision
+           *default-display-precision*
+           *extra-precision*
 
 	   amount-error
 
@@ -366,6 +380,9 @@
 
 ;;;_* Types
 
+(deftype fixnum+ ()
+  '(integer 0 #.most-positive-fixnum))
+
 ;;;_ - COMMODITY-SYMBOL
 
 (defstruct commodity-symbol
@@ -382,6 +399,7 @@
 
 (defvar *default-commodity-pool* (make-commodity-pool))
 (defvar *default-display-precision* 3)
+(defvar *extra-precision* 6)
 
 ;;;_ + COMMODITY
 
@@ -402,7 +420,7 @@
 	      :initform nil :type boolean)
    (display-precision :accessor get-display-precision
 		      :initarg :display-precision
-		      :initform 0 :type fixnum)
+		      :initform 0 :type fixnum+)
    (price-history :accessor get-price-history
 		  :initarg :price-history :initform nil)
    (commodity-pool :accessor get-commodity-pool :initarg :commodity-pool
@@ -463,6 +481,7 @@
 (defstruct (amount (:print-function print-amount))
   (commodity nil :type (or commodity null))
   (quantity 0 :type rational)
+  (full-precision 0 :type fixnum+)
   (keep-precision-p nil :type boolean))
 
 ;;;_ + BALANCE
@@ -516,6 +535,7 @@
 
 (defgeneric commodity-name (item &optional no-annotation))
 (defgeneric display-precision (item))
+(defgeneric amount-precision (item))
 
 (defgeneric market-value (any-item &optional fixed-time))
 
@@ -533,9 +553,10 @@
 (defun print-amount (amount stream depth)
   (print-unreadable-object (amount stream :type t)
     (print-object (amount-commodity amount) stream)
-    (format stream "~&~vA~S :KEEP-PRECISION-P ~S"
-	    depth " " (amount-quantity amount)
-	    (amount-keep-precision-p amount))))
+    (format stream "~&~vA~S :FULL-PRECISION ~S :KEEP-PRECISION-P ~S"
+            depth " " (amount-quantity amount)
+            (amount-full-precision amount)
+            (amount-keep-precision-p amount))))
 
 (defun print-balance (balance stream depth)
   (declare (ignore depth))
@@ -603,6 +624,18 @@
    (operands :reader error-operands :initarg :operands :type list))
   (:report (lambda (condition stream)
 	     (princ (error-description condition) stream))))
+
+;;;_  + Get amount internal precision
+
+(defmethod amount-precision ((item rational))
+  (loop for x of-type rational = item then (* x 10)
+        for precision of-type fixnum+ from 0
+        until (integerp x)
+        while (< precision *extra-precision*)
+        finally (return precision)))
+
+(defmethod amount-precision ((item amount))
+  (amount-full-precision item))
 
 ;;;_  + Create AMOUNT objects from strings
 
@@ -902,8 +935,9 @@
   (assert amount)
   (if (minusp (amount-quantity amount))
       (make-amount :commodity (amount-commodity amount)
-		   :quantity (- (amount-quantity amount))
-		   :keep-precision-p (amount-keep-precision-p amount))
+                   :quantity (- (amount-quantity amount))
+                   :keep-precision-p (amount-keep-precision-p amount)
+                   :full-precision (amount-full-precision amount))
       amount))
 
 (defmacro transform-balance (balance predicate function &key (first-only nil)
@@ -928,25 +962,27 @@
 
   If PRECISION is less than the current internal precision, data will be lost.
 If it is greater, this operation has no effect."
-  (declare (type (or fixnum null) precision))
+  (declare (type (or fixnum+ null) precision))
   (declare (optimize (speed 3) (safety 0)))
   (let ((divisor (and precision
-		      (/ 1 (the integer
-			     (expt 10 (the fixnum precision)))))))
+		      (/ 1 (the fixnum+
+			     (expt 10 (the fixnum+ precision)))))))
     (etypecase amount
       (rational (if divisor
 		    (* (round amount divisor) divisor)
 		    amount))
       (amount
        (unless divisor
-	 (setf divisor (/ 1 (the integer
-			      (expt 10 (the fixnum
+	 (setf divisor (/ 1 (the fixnum+
+			      (expt 10 (the fixnum+
 					 (display-precision
 					  (amount-commodity amount))))))))
        (make-amount
 	:commodity (amount-commodity amount)
 	:quantity (* (round (amount-quantity amount)
 			    divisor) divisor)
+        :full-precision (or precision
+                            (display-precision (amount-commodity amount)))
 	:keep-precision-p (amount-keep-precision-p amount))))))
 
 (defmethod negate ((rational rational))
@@ -956,6 +992,7 @@ If it is greater, this operation has no effect."
   (make-amount
    :commodity (amount-commodity amount)
    :quantity (- (amount-quantity amount))
+   :full-precision (amount-full-precision amount)
    :keep-precision-p (amount-keep-precision-p amount)))
 
 (defmethod negate ((balance balance))
@@ -1003,12 +1040,11 @@ If it is greater, this operation has no effect."
 		       (amount-commodity right))
       (let ((new-value (funcall function (amount-quantity left)
 				(amount-quantity right))))
-	(if (zerop new-value)
-	    0
-	    (make-amount
-	     :commodity (amount-commodity left)
-	     :quantity  new-value
-	     :keep-precision-p (amount-keep-precision-p left))))
+        (make-amount :commodity (amount-commodity left)
+                     :quantity  new-value
+                     :keep-precision-p (amount-keep-precision-p left)
+                     :full-precision (max (amount-precision left)
+                                          (amount-precision right))))
       (let ((left-cell (cons (amount-commodity left) left))
 	    (right-cell (cons (amount-commodity right)
 			      (if adjustor
@@ -1324,7 +1360,7 @@ associated with the given commodity pool.
 			      (last-period
 			       (- (length quantity) last-period 1))
 			      (t 0)))
-	     (denominator (the integer (expt 10 (the fixnum precision))))
+	     (denominator (the integer (expt 10 (the fixnum+ precision))))
 	     (quantity
 	      (/ (parse-integer (delete-if #'(lambda (c)
 					       (or (char= #\. c)
@@ -1352,12 +1388,14 @@ associated with the given commodity pool.
 		      (setf (get-thousand-marks-p base-commodity)
 			    thousand-marks-p))
 
-		  (if (> precision (the fixnum
+		  (if (> precision (the fixnum+
 				     (get-display-precision base-commodity)))
 		      (setf (get-display-precision base-commodity)
 			    precision))))
 
-	      (make-amount :commodity commodity :quantity quantity))
+              (make-amount :commodity commodity
+                           :quantity quantity
+                           :full-precision precision))
 
 	    ;; If the amount had no commodity at all, always preserve full
 	    ;; precision, as if the user had used `exact-amount'.
@@ -1618,17 +1656,18 @@ associated with the given commodity pool.
   (multiply right left))
 
 (defmethod multiply ((left amount) (right rational))
-  (if (zerop right)
-      0
-      (make-amount :commodity (amount-commodity left)
-		   :quantity (* (amount-quantity left) right)
-		   :keep-precision-p (amount-keep-precision-p left))))
+  (make-amount :commodity (amount-commodity left)
+               :quantity (* (amount-quantity left) right)
+               :keep-precision-p (amount-keep-precision-p left)
+               :full-precision (+ (amount-precision left)
+                                  (amount-precision right))))
 
 (defmethod multiply ((left amount) (right amount))
-  (make-amount
-   :commodity (amount-commodity left)
-   :quantity (* (amount-quantity left) (amount-quantity right))
-   :keep-precision-p (amount-keep-precision-p left)))
+  (make-amount :commodity (amount-commodity left)
+               :quantity (* (amount-quantity left) (amount-quantity right))
+               :keep-precision-p (amount-keep-precision-p left)
+               :full-precision (+ (amount-precision left)
+                                  (amount-precision right))))
 
 (defun multiply-in-balance (balance commodity value)
   (transform-balance balance
@@ -1650,24 +1689,44 @@ associated with the given commodity pool.
 ;;;_   : Division
 
 (defmethod divide ((left rational) (right rational))
-  (/ left right))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (/ left right)))
 
 (defmethod divide ((left rational) (right amount))
-  (divide right left))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (let ((right-quantity (amount-quantity right)))
+        (make-amount :commodity (amount-commodity right)
+                     :quantity (/ left right-quantity)
+                     :keep-precision-p (amount-keep-precision-p right)
+                     :full-precision (+ (amount-precision left)
+                                        (ceiling (log (abs right-quantity) 10))
+                                        *extra-precision*)))))
 
 (defmethod divide ((left rational) (right balance))
   (divide right left))
 
 (defmethod divide ((left amount) (right rational))
-  (make-amount :commodity (amount-commodity left)
-	       :quantity (/ (amount-quantity left) right)
-	       :keep-precision-p (amount-keep-precision-p left)))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (make-amount :commodity (amount-commodity left)
+                   :quantity (/ (amount-quantity left) right)
+                   :keep-precision-p (amount-keep-precision-p left)
+                   :full-precision (+ (amount-precision left)
+                                      (ceiling (log (abs right) 10))
+                                      *extra-precision*))))
 
 (defmethod divide ((left amount) (right amount))
-  (make-amount
-   :commodity (amount-commodity left)
-   :quantity (/ (amount-quantity left) (amount-quantity right))
-   :keep-precision-p (amount-keep-precision-p left)))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (let ((right-quantity (amount-quantity right)))
+        (make-amount :commodity (amount-commodity left)
+                     :quantity (/ (amount-quantity left) right-quantity)
+                     :keep-precision-p (amount-keep-precision-p left)
+                     :full-precision (+ (amount-precision left)
+                                        (ceiling (log (abs right-quantity) 10))
+                                        *extra-precision*)))))
 
 (defun divide-in-balance (balance commodity value)
   (transform-balance balance
@@ -1679,10 +1738,14 @@ associated with the given commodity pool.
 		     :first-only t))
 
 (defmethod divide ((left balance) (right rational))
-  (divide-in-balance left nil right))
+  (if (zerop right)
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (divide-in-balance left nil right)))
 
 (defmethod divide ((left balance) (right amount))
-  (divide-in-balance left (amount-commodity right) right))
+  (if (zerop (amount-quantity right))
+      (error 'amount-error :msg "Divisor can't be 0.")
+      (divide-in-balance left (amount-commodity right) right)))
 
 ;;;_ * BALANCE specific
 
@@ -1699,19 +1762,19 @@ associated with the given commodity pool.
       (princ (commodity-name commodity t) output-stream)
       (maybe-gap))
 
-    (multiple-value-bind (quotient remainder)
-	(truncate quantity)
+    (let* ((display-precision (the fixnum+ (or precision
+                                               *default-display-precision*)))
+           (multiplier (expt 10 display-precision)))
+      (multiple-value-bind (quotient remainder)
+          (truncate (round (* quantity multiplier)) multiplier)
 
-      (format output-stream "~@[~a~]~:[~,,vD~;~,,v:D~]"
-              (when (and (zerop quotient) (minusp remainder)) #\-)
-	      (and commodity (commodity-thousand-marks-p commodity))
-	      #\, quotient)
+        (format output-stream "~@[~a~]~:[~,,vD~;~,,v:D~]"
+                (when (and (zerop quotient) (minusp remainder)) #\-)
+                (and commodity (commodity-thousand-marks-p commodity))
+                #\, quotient)
 
-      (unless (or (and precision (zerop precision))
-		  (zerop quantity))
-        (let* ((p (or precision *default-display-precision*))
-               (r (truncate (* (abs remainder) (expt 10 p)))))
-          (format output-stream ".~v,'0D" p r))))
+        (unless (if precision (zerop precision) (zerop remainder))
+          (format output-stream ".~v,'0D" display-precision (abs remainder)))))
 
     (when (and commodity-symbol
 	       (not (commodity-symbol-prefixed-p commodity-symbol)))
@@ -1740,13 +1803,13 @@ associated with the given commodity pool.
 			(width nil)
 			latter-width
 			line-feed-string)
-  (declare (ignore omit-commodity-p full-precision-p latter-width
-		   line-feed-string))
-  (if (zerop rational)
-      (format output-stream "~vD" width 0)
-      ;; jww (2007-12-07): Make the amount of displayed precision configurable
-      (format output-stream "~v,vF" width *default-display-precision*
-	      rational)))
+  (declare (ignore omit-commodity-p full-precision-p
+                   latter-width line-feed-string))
+  (if width
+      (format output-stream "~v@A" width
+              (with-output-to-string (buffer)
+                (print-value-to-string nil nil rational nil buffer)))
+      (print-value-to-string nil nil rational nil output-stream)))
 
 (defmethod print-value ((amount amount) &key
 			(output-stream *standard-output*)
@@ -1765,10 +1828,10 @@ associated with the given commodity pool.
   (let* ((commodity (amount-commodity amount))
 	 (commodity-symbol (and (not omit-commodity-p)
 				(commodity-symbol commodity)))
-	 (display-precision
-	  (unless (or full-precision-p
-		      (amount-keep-precision-p amount))
-	    (display-precision commodity))))
+	 (display-precision (if (or full-precision-p
+                                    (amount-keep-precision-p amount))
+                                (amount-precision amount)
+                                (display-precision commodity))))
     (if width
 	(format output-stream "~v@A" width
 		(with-output-to-string (buffer)
@@ -1818,10 +1881,12 @@ associated with the given commodity pool.
 			 (width nil)
 			 latter-width
 			 line-feed-string)
-  (declare (ignore omit-commodity-p full-precision-p latter-width
-		   line-feed-string))
+  (declare (ignore omit-commodity-p latter-width line-feed-string))
   (with-output-to-string (out)
-    (print-value rational :output-stream out :width width)))
+    (print-value rational
+                 :output-stream out
+                 :full-precision-p full-precision-p
+                 :width width)))
 
 (defmethod format-value ((amount amount) &key
 			 (omit-commodity-p nil)
@@ -2318,6 +2383,7 @@ from the string, for example:
 					    :keep-date keep-date
 					    :keep-tag keep-tag)
 			 :quantity (amount-quantity amount)
+                         :full-precision (amount-full-precision amount)
 			 :keep-precision-p (amount-keep-precision-p amount))
 	    amount))))
 
