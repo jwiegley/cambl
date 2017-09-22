@@ -380,6 +380,9 @@
 
 ;;;_* Types
 
+(deftype fixnum+ ()
+  '(integer 0 #.most-positive-fixnum))
+
 ;;;_ - COMMODITY-SYMBOL
 
 (defstruct commodity-symbol
@@ -417,7 +420,7 @@
 	      :initform nil :type boolean)
    (display-precision :accessor get-display-precision
 		      :initarg :display-precision
-		      :initform 0 :type fixnum)
+		      :initform 0 :type fixnum+)
    (price-history :accessor get-price-history
 		  :initarg :price-history :initform nil)
    (commodity-pool :accessor get-commodity-pool :initarg :commodity-pool
@@ -478,7 +481,7 @@
 (defstruct (amount (:print-function print-amount))
   (commodity nil :type (or commodity null))
   (quantity 0 :type rational)
-  (full-precision nil :type (or fixnum null))
+  (full-precision nil :type (or fixnum+ null))
   (keep-precision-p nil :type boolean))
 
 ;;;_ + BALANCE
@@ -626,7 +629,7 @@
 
 (defmethod amount-precision ((item rational))
   (loop for x of-type rational = item then (* x 10)
-        for precision of-type fixnum from 0
+        for precision of-type fixnum+ from 0
         until (integerp x)
         while (< precision *extra-precision*)
         finally (return precision)))
@@ -960,19 +963,19 @@
 
   If PRECISION is less than the current internal precision, data will be lost.
 If it is greater, this operation has no effect."
-  (declare (type (or fixnum null) precision))
+  (declare (type (or fixnum+ null) precision))
   (declare (optimize (speed 3) (safety 0)))
   (let ((divisor (and precision
-		      (/ 1 (the integer
-			     (expt 10 (the fixnum precision)))))))
+		      (/ 1 (the fixnum+
+			     (expt 10 (the fixnum+ precision)))))))
     (etypecase amount
       (rational (if divisor
 		    (* (round amount divisor) divisor)
 		    amount))
       (amount
        (unless divisor
-	 (setf divisor (/ 1 (the integer
-			      (expt 10 (the fixnum
+	 (setf divisor (/ 1 (the fixnum+
+			      (expt 10 (the fixnum+
 					 (display-precision
 					  (amount-commodity amount))))))))
        (make-amount
@@ -1358,7 +1361,7 @@ associated with the given commodity pool.
 			      (last-period
 			       (- (length quantity) last-period 1))
 			      (t 0)))
-	     (denominator (the integer (expt 10 (the fixnum precision))))
+	     (denominator (the integer (expt 10 (the fixnum+ precision))))
 	     (quantity
 	      (/ (parse-integer (delete-if #'(lambda (c)
 					       (or (char= #\. c)
@@ -1386,7 +1389,7 @@ associated with the given commodity pool.
 		      (setf (get-thousand-marks-p base-commodity)
 			    thousand-marks-p))
 
-		  (if (> precision (the fixnum
+		  (if (> precision (the fixnum+
 				     (get-display-precision base-commodity)))
 		      (setf (get-display-precision base-commodity)
 			    precision))))
@@ -1760,8 +1763,9 @@ associated with the given commodity pool.
       (princ (commodity-name commodity t) output-stream)
       (maybe-gap))
 
-    (let* ((display-precision (or precision *default-display-precision*))
-           (multiplier (expt 10 display-precision)))
+    (let* ((display-precision (the fixnum+ (or precision
+                                               *default-display-precision*)))
+           (multiplier (the fixnum+ (expt 10 display-precision))))
       (multiple-value-bind (quotient remainder)
           (truncate (round (* quantity multiplier)) multiplier)
 
