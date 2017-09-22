@@ -481,7 +481,7 @@
 (defstruct (amount (:print-function print-amount))
   (commodity nil :type (or commodity null))
   (quantity 0 :type rational)
-  (full-precision nil :type (or fixnum+ null))
+  (full-precision 0 :type fixnum+)
   (keep-precision-p nil :type boolean))
 
 ;;;_ + BALANCE
@@ -635,8 +635,7 @@
         finally (return precision)))
 
 (defmethod amount-precision ((item amount))
-  (or (amount-full-precision item)
-      (amount-precision (amount-quantity item))))
+  (amount-full-precision item))
 
 ;;;_  + Create AMOUNT objects from strings
 
