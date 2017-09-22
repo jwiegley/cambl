@@ -1764,7 +1764,7 @@ associated with the given commodity pool.
 
     (let* ((display-precision (the fixnum+ (or precision
                                                *default-display-precision*)))
-           (multiplier (the fixnum+ (expt 10 display-precision))))
+           (multiplier (expt 10 display-precision)))
       (multiple-value-bind (quotient remainder)
           (truncate (round (* quantity multiplier)) multiplier)
 
