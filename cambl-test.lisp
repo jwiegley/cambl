@@ -290,18 +290,18 @@
 	(x6  (amount "DM -123.45"))
 	(x7  (amount "123.45 euro"))
 	(x8  (amount "-123.45 euro"))
-	#-ecl (x9  (amount "123.45€"))
-	#-ecl (x10 (amount "-123.45€")))
+	(x9  (amount "123.45€"))
+	(x10 (amount "-123.45€")))
 
     (assert-true (value/= x1 x2))
     (assert-true (value/= x1 x4))
     (assert-true (value/= x1 x7))
-    #-ecl (assert-true (value/= x1 x9))
+    (assert-true (value/= x1 x9))
     (assert-true (value= x2 x3))
     (assert-true (value/= x4 x5))
     (assert-true (value= x5 x6))
     (assert-true (value= x7 (negate x8)))
-    #-ecl (assert-true (value= x9 (negate x10)))
+    (assert-true (value= x9 (negate x10)))
 
     (assert-valid x1)
     (assert-valid x2)
@@ -311,8 +311,8 @@
     (assert-valid x6)
     (assert-valid x7)
     (assert-valid x8)
-    #-ecl (assert-valid x9)
-    #-ecl (assert-valid x10)))
+    (assert-valid x9)
+    (assert-valid x10)))
 
 (define-test comparisons
   (let ((x1 -123)
@@ -417,7 +417,7 @@
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
 	(x4 (amount "123.45 euro"))
-	#-ecl (x5 (amount "123.45€"))
+	(x5 (amount "123.45€"))
 	(x6 (amount "123.45")))
 
     (assert-value-equal (amount "$246.90") (add x1 x1))
@@ -430,11 +430,11 @@
 
     (assert-value-equal (amount "DM 246.90") (add x3 x3))
     (assert-value-equal (amount "246.90 euro") (add x4 x4))
-    #-ecl (assert-value-equal (amount "246.90€") (add x5 x5))
+    (assert-value-equal (amount "246.90€") (add x5 x5))
 
     (assert-equal "DM 246.90" (format-value (add x3 x3)))
     (assert-equal "246.90 euro" (format-value (add x4 x4)))
-    #-ecl (assert-equal "246.90€" (format-value (add x5 x5)))
+    (assert-equal "246.90€" (format-value (add x5 x5)))
 
     (setf x1 (add x1 (amount "$456.45")))
     (assert-value-equal (amount "$579.90") x1)
@@ -450,7 +450,7 @@
       (assert-valid x2)
       (assert-valid x3)
       (assert-valid x4)
-      #-ecl (assert-valid x5)
+      (assert-valid x5)
       (assert-valid x6)
       (assert-valid x7))))
 
@@ -509,7 +509,7 @@
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
 	(x4 (amount "123.45 euro"))
-	#-ecl (x5 (amount "123.45€"))
+	(x5 (amount "123.45€"))
 	(x6 (amount "123.45")))
 
     (assert-true (value-zerop (subtract x1 x1)))
@@ -531,9 +531,9 @@
     (assert-value-equal (amount "0.00 euro") (subtract x4 x4))
     (assert-value-equal (amount "23.45 euro") (subtract x4 (amount "100.00 euro")))
     (assert-value-equal (amount "-23.45 euro") (subtract (amount "100.00 euro") x4))
-    #-ecl (assert-value-equal (amount "0.00€") (subtract x5 x5))
-    #-ecl (assert-value-equal (amount "23.45€") (subtract x5 (amount "100.00€")))
-    #-ecl (assert-value-equal (amount "-23.45€") (subtract (amount "100.00€") x5))
+    (assert-value-equal (amount "0.00€") (subtract x5 x5))
+    (assert-value-equal (amount "23.45€") (subtract x5 (amount "100.00€")))
+    (assert-value-equal (amount "-23.45€") (subtract (amount "100.00€") x5))
 
     (assert-equal "DM 0.00" (format-value (subtract x3 x3)))
     (assert-equal "DM 23.45" (format-value (subtract x3 (amount "DM 100.00"))))
@@ -541,9 +541,9 @@
     (assert-equal "0.00 euro" (format-value (subtract x4 x4)))
     (assert-equal "23.45 euro" (format-value (subtract x4 (amount "100.00 euro"))))
     (assert-equal "-23.45 euro" (format-value (subtract (amount "100.00 euro") x4)))
-    #-ecl (assert-equal "0.00€" (format-value (subtract x5 x5)))
-    #-ecl (assert-equal "23.45€" (format-value (subtract x5 (amount "100.00€"))))
-    #-ecl (assert-equal "-23.45€" (format-value (subtract (amount "100.00€") x5)))
+    (assert-equal "0.00€" (format-value (subtract x5 x5)))
+    (assert-equal "23.45€" (format-value (subtract x5 (amount "100.00€"))))
+    (assert-equal "-23.45€" (format-value (subtract (amount "100.00€") x5)))
 
     (setf x1 (subtract x1 (amount "$456.45")))
     (assert-value-equal (amount "$-333.00") x1)
@@ -572,7 +572,7 @@
     (assert-valid x2)
     (assert-valid x3)
     (assert-valid x4)
-    #-ecl (assert-valid x5)
+    (assert-valid x5)
     (assert-valid x6)))
 
 (define-test integer-multiplication
@@ -644,7 +644,7 @@
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
 	(x4 (amount "123.45 euro"))
-	#-ecl (x5 (amount "123.45€")))
+	(x5 (amount "123.45€")))
 
     (assert-value-equal (amount "$0.00") (multiply x1 0))
     (assert-value-equal (amount "$0.00") (multiply 0 x1))
@@ -683,7 +683,7 @@
     (assert-valid x2)
     (assert-valid x3)
     (assert-valid x4)
-    #-ecl (assert-valid x5)))
+    (assert-valid x5)))
 
 (define-test integer-division
   (let ((x1 (amount "123"))
@@ -754,7 +754,7 @@
 	(x2 (exact-amount "$123.456789"))
 	(x3 (amount "DM 123.45"))
 	(x4 (amount "123.45 euro"))
-	#-ecl (x5 (amount "123.45€")))
+	(x5 (amount "123.45€")))
 
     (assert-condition 'amount-error (divide x1 0))
     (assert-true (value-zerop (divide 0 x1)))
@@ -810,7 +810,7 @@
     (assert-valid x2)
     (assert-valid x3)
     (assert-valid x4)
-    #-ecl (assert-valid x5)))
+    (assert-valid x5)))
 
 (define-test negation
   (let* ((x1 (amount "-123456"))
@@ -848,8 +848,8 @@
 	(x6 (amount "DM -123.45"))
 	(x7 (amount "123.45 euro"))
 	(x8 (amount "-123.45 euro"))
-	#-ecl (x9 (amount "123.45€"))
-	#-ecl (x10 (amount "-123.45€")))
+	(x9 (amount "123.45€"))
+	(x10 (amount "-123.45€")))
 
     (assert-value-equal (amount "$-123.45") (negate x1))
     (assert-value-equal (amount "$123.45") (negate x2))
@@ -859,8 +859,8 @@
     (assert-value-equal (amount "DM 123.45") (negate x6))
     (assert-value-equal (amount "-123.45 euro") (negate x7))
     (assert-value-equal (amount "123.45 euro") (negate x8))
-    #-ecl (assert-value-equal (amount "-123.45€") (negate x9))
-    #-ecl (assert-value-equal (amount "123.45€") (negate x10))
+    (assert-value-equal (amount "-123.45€") (negate x9))
+    (assert-value-equal (amount "123.45€") (negate x10))
 
     (assert-value-equal (amount "$-123.45") (negate x1))
     (assert-value-equal (amount "$123.45") (negate x2))
@@ -874,8 +874,8 @@
     (assert-equal "DM 123.45" (format-value (negate x6)))
     (assert-equal "-123.45 euro" (format-value (negate x7)))
     (assert-equal "123.45 euro" (format-value (negate x8)))
-    #-ecl (assert-equal "-123.45€" (format-value (negate x9)))
-    #-ecl (assert-equal "123.45€" (format-value (negate x10)))
+    (assert-equal "-123.45€" (format-value (negate x9)))
+    (assert-equal "123.45€" (format-value (negate x10)))
 
     (assert-value-equal (amount "$-123.45") (negate x1))
     (assert-value-equal (amount "$123.45") (negate x2))
@@ -889,8 +889,8 @@
     (assert-valid x6)
     (assert-valid x7)
     (assert-valid x8)
-    #-ecl (assert-valid x9)
-    #-ecl (assert-valid x10)))
+    (assert-valid x9)
+    (assert-valid x10)))
 
 (define-test abs
   (let ((x1 (amount "-1234"))
