@@ -348,6 +348,7 @@
 
 	   commodity-qualified-name
 	   commodity-thousand-marks-p
+           commodity-european-style-p
 	   commodity-no-market-price-p
 	   commodity-builtin-p
 	   commodity-equal
@@ -413,6 +414,9 @@
    (thousand-marks-p :accessor get-thousand-marks-p
 		     :initarg :thousand-marks-p
 		     :initform nil :type boolean)
+   (european-style-p :accessor get-european-style-p
+                     :initarg :european-style-p
+                     :initform nil :type boolean)
    (no-market-price-p :accessor get-no-market-price-p
 		      :initarg :no-market-price-p
 		      :initform nil :type boolean)
@@ -431,8 +435,9 @@
 (defmethod print-object ((commodity commodity) stream)
   (print-unreadable-object (commodity stream :type t)
     (princ (get-symbol commodity) stream)
-    (format stream "~%    :THOUSAND-MARKS-P ~S :DISPLAY-PRECISION ~D"
+    (format stream "~%    :THOUSAND-MARKS-P ~S :EUROPEAN-STYLE-P ~S :DISPLAY-PRECISION ~D"
 	    (get-thousand-marks-p commodity)
+            (get-european-style-p commodity)
 	    (get-display-precision commodity))))
 
 ;;;_ + COMMODITY-ANNOTATION
@@ -607,13 +612,14 @@
        `(setf (,',accessor ,comm) ,value))))
 
 (define-commodity-accessor commodity-symbol get-symbol)
-(define-commodity-accessor commodity-description get-description) 
-(define-commodity-accessor commodity-comment get-comment) 
-(define-commodity-accessor commodity-thousand-marks-p get-thousand-marks-p) 
-(define-commodity-accessor commodity-no-market-price-p get-no-market-price-p) 
-(define-commodity-accessor commodity-builtin-p get-builtin-p) 
-(define-commodity-accessor commodity-price-history get-price-history) 
-(define-commodity-accessor commodity-pool get-commodity-pool) 
+(define-commodity-accessor commodity-description get-description)
+(define-commodity-accessor commodity-comment get-comment)
+(define-commodity-accessor commodity-thousand-marks-p get-thousand-marks-p)
+(define-commodity-accessor commodity-european-style-p get-european-style-p)
+(define-commodity-accessor commodity-no-market-price-p get-no-market-price-p)
+(define-commodity-accessor commodity-builtin-p get-builtin-p)
+(define-commodity-accessor commodity-price-history get-price-history)
+(define-commodity-accessor commodity-pool get-commodity-pool)
 
 ;;;_ * AMOUNT and BALANCE
 
@@ -1275,7 +1281,7 @@ DETAILS, of type COMMODITY-ANNOTATION.
 
 (defun read-amount (in &key (observe-properties-p t)
 		    (pool *default-commodity-pool*))
-  "Parse an AMOUNT from the input IN, which may be a stream or string.
+  "Parse an AMOUNT from the input stream IN.
 
   If :OBSERVE-PROPERTIES-P is T (the default), any display details noticed in
 this amount will be set as defaults for displaying this kind of commodity in
@@ -1294,7 +1300,7 @@ associated with the given commodity pool.
 
   (let ((connected-p t) (prefixed-p t)
 	symbol quantity details
-	negative-p thousand-marks-p)
+	negative-p thousand-marks-p european-style-p)
 
     (when (char= #\- (peek-char-in-line in t))
       (setf negative-p t)
@@ -1344,6 +1350,9 @@ associated with the given commodity pool.
 		(find-commodity symbol :pool pool :create-if-not-exists-p t))
 	    (values nil nil))
 
+      (when (and commodity observe-properties-p)
+        (setf european-style-p (commodity-european-style-p commodity)))
+
       (let* ((last-comma
 	      (locally #+sbcl (declare (sb-ext:muffle-conditions
 					sb-ext:compiler-note))
@@ -1352,13 +1361,24 @@ associated with the given commodity pool.
 	      (locally #+sbcl (declare (sb-ext:muffle-conditions
 					sb-ext:compiler-note))
 		       (position #\. quantity :from-end t)))
-
+             (length (length quantity))
 	     (precision (cond ((and last-comma last-period)
-			       (- (length quantity)
-				  (if (> last-comma last-period)
-				      last-comma last-period) 1))
-			      (last-period
-			       (- (length quantity) last-period 1))
+                               (let ((index (max last-comma last-period)))
+                                 (when (= index last-comma)
+                                   (setf european-style-p t))
+                                 (- length index 1)))
+
+                              ((and last-comma
+                                    (or european-style-p
+                                        (/= (- length last-comma 1) 3)))
+                               (setf european-style-p t)
+                               (- length last-comma 1))
+
+			      ((and last-period
+                                    (or (not european-style-p)
+                                        (/= (- length last-period 1) 3)))
+			       (- length last-period 1))
+
 			      (t 0)))
 	     (denominator (the integer (expt 10 (the fixnum+ precision))))
 	     (quantity
@@ -1368,7 +1388,9 @@ associated with the given commodity pool.
 					   quantity))
 		 denominator)))
 
-	(if last-comma (setf thousand-marks-p t))
+        (when (or (and last-period european-style-p)
+                  (and last-comma (not european-style-p)))
+          (setf thousand-marks-p t))
 	(if negative-p (setf quantity (- quantity)))
 
 	(if commodity
@@ -1387,6 +1409,9 @@ associated with the given commodity pool.
 		  (if thousand-marks-p
 		      (setf (get-thousand-marks-p base-commodity)
 			    thousand-marks-p))
+                  (when european-style-p
+                    (setf (get-european-style-p base-commodity)
+                          european-style-p))
 
 		  (if (> precision (the fixnum+
 				     (get-display-precision base-commodity)))
@@ -1764,17 +1789,23 @@ associated with the given commodity pool.
 
     (let* ((display-precision (the fixnum+ (or precision
                                                *default-display-precision*)))
-           (multiplier (expt 10 display-precision)))
+           (multiplier (expt 10 display-precision))
+           (european-style-p (and commodity
+                                  (commodity-european-style-p commodity))))
       (multiple-value-bind (quotient remainder)
           (truncate (round (* quantity multiplier)) multiplier)
 
         (format output-stream "~@[~a~]~:[~,,vD~;~,,v:D~]"
                 (when (and (zerop quotient) (minusp remainder)) #\-)
                 (and commodity (commodity-thousand-marks-p commodity))
-                #\, quotient)
+                (if european-style-p #\. #\,)
+                quotient)
 
         (unless (if precision (zerop precision) (zerop remainder))
-          (format output-stream ".~v,'0D" display-precision (abs remainder)))))
+          (format output-stream "~:[.~;,~]~v,'0D"
+                  european-style-p
+                  display-precision
+                  (abs remainder)))))
 
     (when (and commodity-symbol
 	       (not (commodity-symbol-prefixed-p commodity-symbol)))

@@ -129,12 +129,37 @@
 
     (assert-equal "$2,000.00"
                   (format-value (amount* "$2000")))
+    (assert-equal "$2,000.00"
+                  (format-value (amount* "$2000.00")))
+    (assert-equal "$2,000.00"
+                  (format-value (amount* "$2000,00")))
     (assert-equal "0" (format-value (amount "0")))
     (assert-equal "$0.00" (format-value (amount "$0")))
     (assert-equal "$2,000.00"
                   (format-value (amount* "$2,000.00")))
     (assert-equal "$2,000.00"
                   (format-value (amount* "$2.000,00")))
+
+    ;; Switch to European style
+    (amount "$1.000,00")
+    (assert-true (commodity-european-style-p (amount-commodity x12)))
+
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2000")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2000.00")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2000,00")))
+    (assert-equal "0" (format-value (amount "0")))
+    (assert-equal "$0,00" (format-value (amount "$0")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2,000.00")))
+    (assert-equal "$2.000,00"
+                  (format-value (amount* "$2.000,00")))
+
+    ;; Switch back to American style
+    (setf (commodity-european-style-p (amount-commodity x12)) nil)
+    (assert-false (commodity-european-style-p (amount-commodity x12)))
 
     (let ((x15 (amount* "$2000"))
 	  (x16 (amount* "$2,000")))
