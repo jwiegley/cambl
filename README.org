@@ -1,35 +1,295 @@
-* CAMBL
+#+TITLE: CAMBL
 
 *Commoditized Amounts and Balances*\\
 
-This library provides a convenient facility for working with commoditized
-values.  It does not allow compound units -- and so is not suited for
-scientific operations -- but does work rather nicely for the purpose of
-financial calculations.
+This library provides a convenient facility for working with
+commoditized values. It does not allow compound units -- and so is not
+suited for scientific operations -- but does work rather nicely for
+the purpose of financial calculations.
 
-The primary entry point to using this library is the creation of VALUES,
-which may be of many different types.  These VALUES are then used as
-arguments to a set of basic mathematical OPERATIONS, which also yield
-VALUES.  However, the type of the result may not be the same type as either
-of the operands.
+The primary entry point to using this library is the creation of
+/VALUES/, which may be of many different types. These /VALUES/ are
+then used as arguments to a set of basic mathematical /OPERATIONS/,
+which also yield /VALUES/. However, the type of the result may not be
+the same type as either of the operands.
 
 For example, let's say you want to create a figure representing 10 US
-dollars.  You then add an INTEGER to this amount, the number 200.  The
-result of such an operation will be an amalgam of the two units involved:
-Dollars, and No-units.  This dual-commodity value is represented as a
-BALANCE object, whose printed form shows each commodity amount on its own
-line.  For example:
+dollars. You then add an /INTEGER/ to this amount, the number 200. The
+result of such an operation will be an amalgam of the two units
+involved: Dollars, and No-units. This dual-commodity value is
+represented as a /BALANCE/ object, whose printed form shows each
+commodity amount on its own line. For example:
 
 #+BEGIN_SRC lisp
 (let ((value (cambl:amount "$100.00")))
-    (princ (cambl:format-value (cambl:add value 200))))
-  => 200
-     $100.00
+  (princ (cambl:format-value (cambl:add value 200))))
+ => 200
+    $100.00
 #+END_SRC
 
-This library aims to provide convenient access to commoditized math; that
-is: math involving commodity units.  Unlike scientific units, there is no
-concept of "compound" units.  If you divide 1kg by 1m, you do not get "1
-kg/m", but "1 kg" (the unit of the second operand is ignored for
-multiplication and division).  The intended use of this library is in
-situations such as computing financial transactions.
+This library aims to provide convenient access to commoditized math;
+that is: math involving commodity units. Unlike scientific units,
+there is no concept of "compound" units. If you divide 1kg by 1m, you
+do not get "1 kg/m", but "1 kg" (the unit of the second operand is
+ignored for multiplication and division). The intended use of this
+library is in situations such as computing financial transactions.
+
+* Amounts
+
+There are just a few main entry points to the *CAMBL* library for
+dealing with amounts (which is mainly how you'll use it). Here is
+a quick list, following by a description in the context of a REPL
+session. Note that where the name contains value, it will work for
+integers, amounts and balances. If it contains amount or balance, it
+only operates on entities of that type.
+
+|-------------------+----------------------------------------------------|
+| Function          | Description                                        |
+|-------------------+----------------------------------------------------|
+| amount[*]         | create an amount from a string                     |
+|-------------------+----------------------------------------------------|
+| exact-amount      | create an amount from a string which overrides     |
+|                   | its commodity's display precision; this feature    |
+|                   | "sticks" through any math operations               |
+|-------------------+----------------------------------------------------|
+| parse-amount[*]   | parse an amount from a string (alias for 'amount') |
+|-------------------+----------------------------------------------------|
+| read-amount[*]    | read an amount from a stream                       |
+|-------------------+----------------------------------------------------|
+| read-exact-amount | read an exact amount from a stream                 |
+|-------------------+----------------------------------------------------|
+| format-value      | format a value to a string                         |
+|-------------------+----------------------------------------------------|
+| print-value       | print a value to a stream                          |
+|-------------------+----------------------------------------------------|
+| add               | perform math using values; the values are          |
+| subtract          | changed as necessary to preserve information       |
+| multiply          | (adding two amounts may result in a                |
+| divide            | balance).                                          |
+|-------------------+----------------------------------------------------|
+| value-zerop       | would the value display as zero?                   |
+|-------------------+----------------------------------------------------|
+| value-zerop*      | is the value truly zero?                           |
+|-------------------+----------------------------------------------------|
+| value-minusp      | would the amount display as a negative amount?     |
+|-------------------+----------------------------------------------------|
+| value-minusp*     | is the amount truly negative?                      |
+|-------------------+----------------------------------------------------|
+| value-plusp       | would it display as an amount greater than zero?   |
+|-------------------+----------------------------------------------------|
+| value-plusp*      | is it truly greater than zero?                     |
+|-------------------+----------------------------------------------------|
+| value=            | compare two values                                 |
+| value/=           |                                                    |
+|-------------------+----------------------------------------------------|
+| value<            | compare values (not meaningful for all values,     |
+| value<=           | such as balances)                                  |
+| value>            |                                                    |
+| value>=           |                                                    |
+|-------------------+----------------------------------------------------|
+| value-equal       | compare two values for exact match                 |
+|-------------------+----------------------------------------------------|
+| value-equalp      | compare two values only after rounding to what     |
+|                   | would be shown to the user (approximate match)     |
+|                   | -- this is the same as value=                      |
+|-------------------+----------------------------------------------------|
+| value-not-equal   | compare if two values for not an exact match       |
+|-------------------+----------------------------------------------------|
+| value-not-equalp  | compare two values after commodity rounding        |
+|-------------------+----------------------------------------------------|
+| value-lessp       | same as value<                                     |
+|-------------------+----------------------------------------------------|
+| value-lessp*      | compare if a < b exactly, with full precision      |
+|-------------------+----------------------------------------------------|
+| value-lesseqp     | same as value<=                                    |
+|-------------------+----------------------------------------------------|
+| value-lesseqp*    | exact version of value<=                           |
+|-------------------+----------------------------------------------------|
+| value-greaterp    | same as value>                                     |
+|-------------------+----------------------------------------------------|
+| value-greaterp*   | exact version of value>                            |
+|-------------------+----------------------------------------------------|
+| value-greatereqp  | same as value>=                                    |
+|-------------------+----------------------------------------------------|
+| value-greatereqp* | exact version of value>=                           |
+|-------------------+----------------------------------------------------|
+| amount-precision  | return the internal precision of an amount         |
+|-------------------+----------------------------------------------------|
+| display-precision | return the "display" precision for an amount       |
+|                   | or a commodity                                     |
+|-------------------+----------------------------------------------------|
+
+* Example Session
+
+Interacting with *CAMBL* begins with creating an amount. This is done
+most easily from a string, but it can also be read from a stream:
+
+#+BEGIN_SRC lisp
+(cambl:amount "$100.00")
+ => #<CAMBL:AMOUNT "$100.00" :KEEP-PRECISION-P NIL>
+
+(with-input-from-string (in "$100.00")
+  (cambl:read-amount in))
+ => #<CAMBL:AMOUNT "$100.00" :KEEP-PRECISION-P NIL>
+#+END_SRC
+
+When you parse an amount using one of these two functions, *CAMBL*
+creates a /COMMODITY/ class for you, whose symbol name is "$". This
+class remembers details about how you used the commodity, such as the
+input precision and the format of the commodity symbol. Some of these
+details can be inspected by looking at the amount's commodity
+directly:
+
+#+BEGIN_SRC lisp
+(cambl:amount-commodity (cambl:amount "$100.00"))
+ => #<CAMBL::COMMODITY #S(CAMBL::COMMODITY-SYMBOL
+                          :NAME $
+                          :NEEDS-QUOTING-P NIL
+                          :PREFIXED-P T
+                          :CONNECTED-P T)
+        :THOUSAND-MARKS-P NIL :DISPLAY-PRECISION 2>
+#+END_SRC
+
+Here you can see that the commodity for $100.00 is $, and it knows
+that the commodity should be prefixed to the amount, and that it gets
+connected to the amount. This commodity was used without any "thousand
+marks" (i.e. $1000.00 vs $1,000.00), and it has a maximum display
+precision of TWO observed so far. If we print such an amount, we'll
+see the same style as was input:
+
+#+BEGIN_SRC lisp
+(cambl:format-value (cambl:amount "$100.00"))
+ => "$100.00"
+(cambl:print-value (cambl:amount "$100.00"))
+ => NIL
+  $100.00
+#+END_SRC
+
+*CAMBL* observed how you used the "$" commodity, and now reports back
+all dollar figures after the same fashion. Even though there are no
+cents in the amounts above, *CAMBL* will still record a full two
+digits of precision (this becomes important during division, to guard
+against fractional losses during repeated rounding).
+
+#+BEGIN_SRC lisp
+(cambl:amount-precision (cambl:amount "$100.00"))
+ => 2
+#+END_SRC
+
+*CAMBL* remembers the greatest precision it has seen thus far, but
+never records a lesser precision. So if you parse $100.00 and then
+$100, both values will be printed as $100.00.
+
+There are three functions for creating amounts, but they have some
+subtle differences where precision is concerned. They are: ~amount~,
+~amount*~, and ~exact-amount~. Here are the differences:
+
+#+BEGIN_SRC lisp
+(cambl:amount "$100.00")
+ => #<CAMBL:AMOUNT "$100.00" :KEEP-PRECISION-P NIL>
+#+END_SRC
+
+ - amount has an internal precision of 2
+ - commodity $ has a display precision of 2 (if no other
+   amount using a higher precision was observed so far)
+ - when printing, amount uses the commodity's precision
+
+#+BEGIN_SRC lisp
+(cambl:format-value *)
+ => "$100.00"
+(cambl:format-value ** :full-precision-p t)
+ => "$100.00"
+#+END_SRC
+
+#+BEGIN_SRC lisp
+(cambl:amount* "$100.0000")
+ => #<CAMBL:AMOUNT "$100.0000" :KEEP-PRECISION-P NIL>
+#+END_SRC
+
+ - amount has an internal precision of 4
+ - commodity $ still has a display precision of 2 (from above)
+ - when printing, amount uses the commodity's precision
+
+#+BEGIN_SRC lisp
+(cambl:format-value *)
+ => "$100.00"
+(cambl:format-value ** :full-precision-p t)
+ => "$100.0000"
+#+END_SRC
+
+#+BEGIN_SRC lisp
+(cambl:exact-amount "$100.0000")
+ => #<CAMBL:AMOUNT "$100.0000" :KEEP-PRECISION-P T>
+#+END_SRC
+
+ - amount has an internal precision of 4
+ - commodity $ still has a display precision of 2 (from above)
+ - when printing, amount uses its internal precision
+
+#+BEGIN_SRC lisp
+(cambl:format-value *)
+ => "$100.0000"
+(cambl:format-value ** :full-precision-p t)
+ => "$100.0000"
+#+END_SRC
+
+There are similar variants for the stream reading functions:
+
+  - ~read-amount~
+  - ~read-amount*~
+  - ~read-exact-amount~
+
+Internally, an amount's quantity is stored as a rational number, and
+therefore has a perfect precision. The internal precision field of an
+amount tries to keep track of the number of decimals to display when
+printing a value with the ~FULL-PRECISION-P~ option.
+
+By default, uncommoditized amounts (which are in fact just rational
+numbers), are displayed with a precision of 3. This can be changed by
+setting ~CAMBL:*DEFAULT-DISPLAY-PRECISION*~. When they are used in
+math operations, their considered internal precision to compute the
+result's internal precision is at most ~CAMBL:*EXTRA-PRECISION*~
+(which is 6 by default).
+
+_NOTE:_ The ~KEEP-PRECISION-P~ property of an amount carries through
+any math operations involving that amount, so that the final result is
+always displayed using its own internal percision.
+
+The point of all this is that amounts are displayed as the user
+expects them to be, but internally never lose information. In fact, if
+you divide two high internal precision amounts together, you'll get
+a new amount with a very high internal precision, but which still
+displays as expected:
+
+#+BEGIN_SRC lisp
+(setf *tmp* (cambl:divide (cambl:amount "$100.00")
+                          (cambl:amount "50000000")))
+
+(cambl:format-value *tmp* :full-precision-p t)
+ => "$0.0000020000000000"
+(cambl:format-value *tmp*)
+ => "$0.00"
+#+END_SRC
+
+You'll notice here that the amount displayed is not
+$0.00000200000000002. This is because *CAMBL* does not try to capture
+every digit resulting from a division; rather, it keeps six more
+digits of precision than is strictly necessary so that even after
+millions of calculations, not a penny is lost. If you find this is not
+enough slack for your calculations, you can set
+~CAMBL:*EXTRA-PRECISION*~ to a higher or lower value.
+
+* Commodities
+
+*CAMBL* offers several methods for accessing the commodity information
+relating to amounts:
+
+|--------------------------+---------------------------------------------|
+| Function                 | Description                                 |
+|--------------------------+---------------------------------------------|
+| amount-commodity         | the COMMODITY referenced by an amount       |
+|--------------------------+---------------------------------------------|
+| display-precision        | display precision of an AMOUNT or COMMODITY |
+|--------------------------+---------------------------------------------|
+| commodity-qualified-name | the name used print a COMMODITY             |
+|--------------------------+---------------------------------------------|
