@@ -2092,7 +2092,7 @@ the stream stops and the invalid character is put back."
       (containers:inorder-walk
        history
        (lambda (visited)
-         (if (local-time:timestamp<
+         (if (local-time:timestamp<=
               (pricing-entry-moment visited)
               fixed-time)
              (setf max visited)
