@@ -2132,7 +2132,7 @@ the stream stops and the invalid character is put back."
       (mapc #'(lambda (cell)
                 (multiple-value-bind (value moment)
                     (market-value (cdr cell) fixed-time)
-                  (incf market-balance value)
+                  (setf market-balance (add market-balance value))
                   (update-range moment)))
             (get-amounts-map balance))
       (values market-balance earliest latest))))
