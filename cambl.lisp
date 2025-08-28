@@ -264,6 +264,7 @@
 
 (defpackage :cambl
   (:use :cl :local-time :periods :alexandria)
+  (:shadowing-import-from :local-time day-of)
   (:export pushend
 
 	   value
